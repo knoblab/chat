@@ -445,6 +445,36 @@ export const Dashboard: React.FC = () => {
             {/* Profile Form */}
             <form onSubmit={handleSaveProfile} className="pdf-flex-col pdf-gap-150">
               <div>
+                <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block', fontSize: '0.85rem' }}>My Matrix ID (Click to Copy)</label>
+                <div 
+                  className="pdf-panel pdf-selectable pdf-font-mono" 
+                  onClick={() => {
+                    if (client?.getUserId()) {
+                      navigator.clipboard.writeText(client.getUserId()!);
+                      alert('Copied Matrix ID to clipboard!');
+                    }
+                  }}
+                  style={{ 
+                    padding: 'var(--space-100)', 
+                    background: 'var(--color-bg-secondary)', 
+                    fontSize: '0.75rem',
+                    wordBreak: 'break-all',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 'var(--space-100)',
+                    cursor: 'pointer',
+                    borderRadius: '6px',
+                    border: '1px solid var(--color-border-default)'
+                  }}
+                >
+                  <span style={{ flex: 1, userSelect: 'all', WebkitUserSelect: 'all' }}>{client?.getUserId()}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--color-functional-red)', fontWeight: 600, flexShrink: 0 }}>Copy</span>
+                </div>
+              </div>
+
+              <div>
                 <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block', fontSize: '0.85rem' }}>Nickname</label>
                 <input 
                   type="text" 
