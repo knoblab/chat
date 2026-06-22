@@ -460,6 +460,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
     }
   };
 
+  // Initial load auto-scroll
+  useEffect(() => {
+    setTimeout(() => scrollToBottom('auto'), 100);
+  }, [roomId, room]);
+
   if (!room) {
     return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading room...</div>;
   }
@@ -468,11 +473,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
   const myId = client?.getUserId();
   const otherMembers = room?.getMembers().filter(m => m.userId !== myId);
   const isPending = isDirect && otherMembers && otherMembers.length > 0 && otherMembers.every(m => m.membership === 'invite');
-
-  // Initial load auto-scroll
-  useEffect(() => {
-    setTimeout(() => scrollToBottom('auto'), 100);
-  }, [roomId, room]);
 
   return (
     <div className="pdf-flex-col pdf-h-full" style={{ flex: 1 }}>
