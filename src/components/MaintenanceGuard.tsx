@@ -12,7 +12,7 @@ export const MaintenanceGuard: React.FC<MaintenanceGuardProps> = ({ children }) 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let checkInterval: NodeJS.Timeout;
+    let checkInterval: any;
     
     const init = async () => {
       await syncServerTime();

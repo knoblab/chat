@@ -1,5 +1,5 @@
 let timeOffset = 0;
-let isSynced = false;
+export let isSynced = false;
 
 export const syncServerTime = async (): Promise<number> => {
   const start = Date.now();

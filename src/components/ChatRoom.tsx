@@ -487,8 +487,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
       // Check current join rules
       let joinRule = 'invite';
       try {
-        const stateEvent = client.getRoomStateEvent(roomId, 'm.room.join_rules', '');
-        joinRule = stateEvent ? stateEvent.join_rule : 'invite';
+        const room = client.getRoom(roomId);
+        const stateEvent = room?.currentState.getStateEvents('m.room.join_rules', '');
+        joinRule = stateEvent ? stateEvent.getContent().join_rule : 'invite';
       } catch (e) {
         console.warn("Could not fetch join rules, assuming invite");
       }
@@ -497,7 +498,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
         const confirmShare = window.confirm("링크로 누구나 입장할 수 있게 방 설정을 변경하시겠습니까?");
         if (!confirmShare) return;
         
-        await client.sendStateEvent(roomId, 'm.room.join_rules', { join_rule: 'public' }, '');
+        await client.sendStateEvent(roomId, 'm.room.join_rules' as any, { join_rule: 'public' }, '');
       }
 
       // Generate the link
