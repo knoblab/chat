@@ -80,6 +80,14 @@ export const initMatrixClient = async (
   try {
     // Initialize Rust crypto layer for E2EE support
     await matrixClient.initRustCrypto();
+    
+    // Automatically trust all devices to allow E2EE message key sharing with unverified devices
+    if ((matrixClient as any).setGlobalErrorOnUnknownDevices) {
+      (matrixClient as any).setGlobalErrorOnUnknownDevices(false);
+    }
+    if ((matrixClient as any).setCryptoTrustAllDevices) {
+      (matrixClient as any).setCryptoTrustAllDevices(true);
+    }
   } catch (error) {
     console.warn("Could not init rust crypto. It might be already initialized or not supported", error);
   }
