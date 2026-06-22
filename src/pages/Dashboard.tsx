@@ -311,7 +311,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {mobileTab === 'friends' && (
-            <FriendList onSelectRoom={setSelectedRoomId} selectedRoomId={selectedRoomId} />
+            <FriendList onSelectRoom={setSelectedRoomId} selectedRoomId={selectedRoomId} onSwitchToChats={() => setMobileTab('chats')} />
           )}
 
           {mobileTab === 'settings' && (
@@ -553,7 +553,7 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'chats' ? (
             <RoomList onSelectRoom={setSelectedRoomId} selectedRoomId={selectedRoomId} />
           ) : (
-            <FriendList onSelectRoom={setSelectedRoomId} selectedRoomId={selectedRoomId} />
+            <FriendList onSelectRoom={setSelectedRoomId} selectedRoomId={selectedRoomId} onSwitchToChats={() => setActiveTab('chats')} />
           )}
         </div>
 

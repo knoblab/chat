@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
-import { UserPlus, Check, X, Search, Clock, User, LogOut } from 'lucide-react';
+import { UserPlus, Check, X, Search, Clock, User, MessageSquare, Trash2 } from 'lucide-react';
 
 interface FriendListProps {
   onSelectRoom: (roomId: string) => void;
   selectedRoomId: string | null;
+  onSwitchToChats?: () => void;
 }
 
 interface SearchResult {
@@ -14,26 +15,8 @@ interface SearchResult {
   avatarUrl?: string;
 }
 
-export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRoomId }) => {
+export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRoomId, onSwitchToChats }) => {
   const { client } = useMatrix();
-
-  const handleLeaveDM = async (e: React.MouseEvent, roomId: string) => {
-    e.stopPropagation();
-    if (!client) return;
-    if (!confirm('Are you sure you want to remove this friend conversation?')) return;
-
-    try {
-      await client.leave(roomId);
-      await client.forget(roomId);
-      if (selectedRoomId === roomId) {
-        onSelectRoom('');
-      }
-      updateLists();
-    } catch (err: any) {
-      console.error('Failed to remove friend DM:', err);
-      alert(err.message || 'Failed to remove conversation');
-    }
-  };
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -179,7 +162,6 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
 
       if (existing) {
         alert('A connection (or pending request) with this user already exists.');
-        onSelectRoom(existing.roomId);
         return;
       }
 
@@ -238,7 +220,12 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
       }
 
       updateLists();
+      
+      // Switch to Chats tab and select the DM room
       onSelectRoom(roomId);
+      if (onSwitchToChats) {
+        onSwitchToChats();
+      }
     } catch (err: any) {
       console.error('Accept invite error:', err);
       alert('Failed to accept request');
@@ -253,6 +240,31 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
     } catch (err: any) {
       console.error('Decline invite error:', err);
       alert('Failed to decline request');
+    }
+  };
+
+  const handleRemoveFriend = async (e: React.MouseEvent, roomId: string) => {
+    e.stopPropagation();
+    if (!client) return;
+    if (!confirm('Are you sure you want to remove this friend?')) return;
+
+    try {
+      await client.leave(roomId);
+      await client.forget(roomId);
+      if (selectedRoomId === roomId) {
+        onSelectRoom('');
+      }
+      updateLists();
+    } catch (err: any) {
+      console.error('Failed to remove friend:', err);
+      alert(err.message || 'Failed to remove friend');
+    }
+  };
+
+  const handleOpenChat = (roomId: string) => {
+    onSelectRoom(roomId);
+    if (onSwitchToChats) {
+      onSwitchToChats();
     }
   };
 
@@ -398,42 +410,50 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
             <div className="pdf-flex-col" style={{ gap: 'var(--space-025)' }}>
               {friends.map(room => {
                 const info = getOtherMemberInfo(room);
-                const isSelected = selectedRoomId === room.roomId;
                 return (
                   <div
                     key={room.roomId}
-                    onClick={() => onSelectRoom(room.roomId)}
-                    className={`pdf-nav-item ${isSelected ? 'active' : ''}`}
-                    style={{ padding: 'var(--space-100) var(--space-150)', borderRadius: '4px' }}
+                    className="pdf-panel pdf-flex-row pdf-items-center"
+                    style={{ padding: 'var(--space-100) var(--space-150)', marginBottom: 0, gap: 'var(--space-100)' }}
                   >
-                    <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-150)', overflow: 'hidden', width: '100%' }}>
-                      <div style={{ 
-                        width: '32px', height: '32px', 
-                        borderRadius: '50%', background: 'var(--color-bg-secondary)', 
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'var(--color-functional-red)',
-                        fontWeight: 'bold',
-                        fontSize: '0.85rem',
-                        flexShrink: 0,
-                        border: '1px solid var(--color-border-default)'
-                      }}>
-                        {info.name.charAt(0).toUpperCase()}
+                    {/* Avatar */}
+                    <div style={{ 
+                      width: '32px', height: '32px', 
+                      borderRadius: '50%', background: 'var(--color-functional-red)', 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      fontSize: '0.85rem',
+                      flexShrink: 0,
+                    }}>
+                      {info.name.charAt(0).toUpperCase()}
+                    </div>
+                    {/* Info */}
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <div className="pdf-text-label-16" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, fontSize: '0.9rem' }}>
+                        {info.name}
                       </div>
-                      <div style={{ flex: 1, overflow: 'hidden' }}>
-                        <div className="pdf-text-label-16" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, fontSize: '0.9rem' }}>
-                          {info.name}
-                        </div>
-                        <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginTop: '2px' }}>
-                          {info.userId}
-                        </div>
+                      <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginTop: '2px' }}>
+                        {info.userId}
                       </div>
+                    </div>
+                    {/* Actions */}
+                    <div className="pdf-flex-row pdf-gap-050" style={{ flexShrink: 0 }}>
                       <button 
-                        onClick={(e) => handleLeaveDM(e, room.roomId)}
-                        className="pdf-secondary-btn pdf-btn-xs"
-                        style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', flexShrink: 0, opacity: 0.7, border: 'none', background: 'transparent' }}
-                        title="Remove Friend DM"
+                        onClick={() => handleOpenChat(room.roomId)}
+                        className="pdf-btn-primary pdf-btn-xs"
+                        style={{ height: '26px', padding: '0 8px', fontSize: '11px', gap: '4px' }}
+                        title="Open Chat"
                       >
-                        <LogOut size={12} style={{ color: 'var(--color-functional-red)' }} />
+                        <MessageSquare size={11} /> Chat
+                      </button>
+                      <button 
+                        onClick={(e) => handleRemoveFriend(e, room.roomId)}
+                        className="pdf-secondary-btn pdf-btn-xs"
+                        style={{ width: '26px', height: '26px', padding: 0, justifyContent: 'center', border: 'none', background: 'transparent', opacity: 0.5 }}
+                        title="Remove Friend"
+                      >
+                        <Trash2 size={11} style={{ color: 'var(--color-functional-red)' }} />
                       </button>
                     </div>
                   </div>
