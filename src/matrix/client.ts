@@ -59,6 +59,25 @@ const joinOrCreateGeneralRoom = async (client: MatrixClient, userId: string) => 
   }
 };
 
+/**
+ * Create an IndexedDB-backed store for persisting sync state and crypto keys.
+ * Falls back to MemoryStore if IndexedDB is unavailable.
+ */
+const createStore = async () => {
+  try {
+    const store = new sdk.IndexedDBStore({
+      indexedDB: globalThis.indexedDB,
+      dbName: 'qpi-chat-sync',
+      localStorage: globalThis.localStorage,
+    });
+    await store.startup();
+    return store;
+  } catch (err) {
+    console.warn('IndexedDBStore unavailable, falling back to MemoryStore:', err);
+    return new sdk.MemoryStore();
+  }
+};
+
 export const initMatrixClient = async (
   accessToken: string,
   userId: string,
@@ -68,13 +87,15 @@ export const initMatrixClient = async (
     matrixClient.stopClient();
   }
 
+  const store = await createStore();
+
   matrixClient = sdk.createClient({
     baseUrl: HOMESERVER_URL,
     accessToken,
     userId,
     deviceId,
-    // Provide an indexedDB storage for keeping session state across reloads
-    store: new sdk.MemoryStore(),
+    store,
+    timelineSupport: true,
   });
 
   try {
@@ -92,8 +113,33 @@ export const initMatrixClient = async (
     console.warn("Could not init rust crypto. It might be already initialized or not supported", error);
   }
 
-  // Start syncing
-  await matrixClient.startClient({ initialSyncLimit: 20 });
+  // Start syncing with larger limit for history
+  await matrixClient.startClient({ initialSyncLimit: 30 });
+
+  // When sync completes, pre-download crypto keys for all room members
+  matrixClient.once('sync' as any, async (state: string) => {
+    if (state === 'PREPARED' || state === 'SYNCING') {
+      try {
+        const rooms = matrixClient!.getVisibleRooms();
+        const allUserIds = new Set<string>();
+        rooms.forEach(room => {
+          if (matrixClient!.isRoomEncrypted(room.roomId)) {
+            room.getMembers().forEach(m => {
+              if (m.membership === 'join') {
+                allUserIds.add(m.userId);
+              }
+            });
+          }
+        });
+        if (allUserIds.size > 0 && (matrixClient as any).downloadKeys) {
+          await (matrixClient as any).downloadKeys(Array.from(allUserIds));
+          console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users`);
+        }
+      } catch (err) {
+        console.warn('Failed to pre-download crypto keys:', err);
+      }
+    }
+  });
 
   // Auto-join/create general room in background
   joinOrCreateGeneralRoom(matrixClient, userId);

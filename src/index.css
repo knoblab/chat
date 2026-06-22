@@ -532,9 +532,12 @@ button {
     height: 100% !important;
     display: flex !important;
   }
+}
 
+/* Hide the back button only when the sidebar is always visible (desktop ≥1200px) */
+@media (min-width: 1200px) {
   .mobile-back-btn {
-    display: inline-flex !important;
+    display: none !important;
   }
 }
 

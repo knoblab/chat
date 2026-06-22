@@ -81,22 +81,45 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
         .filter(event => {
           if (event.getType() !== 'm.room.message') return false;
           if (event.isRedacted()) return false;
-          const relation = event.getRelation();
-          if (relation && relation.rel_type === 'm.replace') return false;
+          // Filter out edit replacement events (m.replace)
+          const content = event.getContent();
+          const relatesTo = content['m.relates_to'];
+          if (relatesTo && relatesTo.rel_type === 'm.replace') return false;
           return true;
         })
         .map(event => {
-          const replacingEvent = event.replacingEvent();
-          const content = replacingEvent ? replacingEvent.getContent() : event.getContent();
+          // Check for edit replacement: look for a replacing event or m.new_content in the content
+          const replacingEvent = event.replacingEvent?.();
+          let body: string;
+          let msgtype: string;
+          let url: string;
+          let isEdited = false;
+
+          if (replacingEvent) {
+            // SDK has linked the edit event
+            const rc = replacingEvent.getContent();
+            const newContent = rc['m.new_content'] || rc;
+            body = newContent.body || '';
+            msgtype = newContent.msgtype || 'm.text';
+            url = newContent.url || '';
+            isEdited = true;
+          } else {
+            // Use the event's own content (handles decrypted E2EE messages)
+            const c = event.getContent();
+            body = c.body || '';
+            msgtype = c.msgtype || 'm.text';
+            url = c.url || '';
+          }
+
           return {
             id: event.getId() || Math.random().toString(),
             sender: event.getSender() || 'Unknown',
-            body: content.body || '',
-            msgtype: content.msgtype || 'm.text',
-            url: content.url || '',
+            body,
+            msgtype,
+            url,
             timestamp: event.getTs(),
             isEncrypted: event.isEncrypted(),
-            isEdited: !!replacingEvent
+            isEdited
           };
         });
       setMessages(msgs);
@@ -107,21 +130,38 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
 
     updateMessages();
 
-    const handleEvent = (event: MatrixEvent) => {
+    // Timeline events (new messages, edits)
+    const handleTimelineEvent = (event: MatrixEvent) => {
       if (event.getRoomId() === roomId) {
-        if (event.getType() === 'm.room.message' || event.getType() === 'm.room.name') {
-          updateMessages();
-          if (event.getType() === 'm.room.name' && r) {
-            setNewRoomName(r.name || '');
-          }
+        updateMessages();
+        if (event.getType() === 'm.room.name' && r) {
+          setNewRoomName(r.name || '');
         }
       }
     };
 
-    client.on('Room.timeline' as any, handleEvent);
+    // Redaction events (message deletion)
+    const handleRedaction = (event: MatrixEvent) => {
+      if (event.getRoomId() === roomId) {
+        updateMessages();
+      }
+    };
+
+    // Decrypted events (E2EE messages decrypted after initial load)
+    const handleDecrypted = (event: MatrixEvent) => {
+      if (event.getRoomId() === roomId) {
+        updateMessages();
+      }
+    };
+
+    client.on('Room.timeline' as any, handleTimelineEvent);
+    client.on('Room.redaction' as any, handleRedaction);
+    client.on('Event.decrypted' as any, handleDecrypted);
 
     return () => {
-      client.removeListener('Room.timeline' as any, handleEvent);
+      client.removeListener('Room.timeline' as any, handleTimelineEvent);
+      client.removeListener('Room.redaction' as any, handleRedaction);
+      client.removeListener('Event.decrypted' as any, handleDecrypted);
     };
   }, [client, roomId]);
 
@@ -343,7 +383,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
               onClick={onBack}
               className="pdf-secondary-btn mobile-back-btn"
               style={{ 
-                display: 'none',
                 width: '32px', height: '32px', 
                 padding: 0, justifyContent: 'center', 
                 marginRight: 'var(--space-050)',
