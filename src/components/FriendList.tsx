@@ -212,7 +212,31 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
   const handleAcceptRequest = async (roomId: string) => {
     if (!client) return;
     try {
-      await client.joinRoom(roomId);
+      const joinedRoom = await client.joinRoom(roomId);
+      
+      // Auto-establish cryptographic trust with the inviter
+      const myId = client.getUserId();
+      const members = joinedRoom.getMembers().filter(m => m.userId !== myId);
+      if (members.length > 0) {
+        const targetUserId = members[0].userId;
+        try {
+          if ((client as any).downloadKeys) {
+            await (client as any).downloadKeys([targetUserId]);
+          } else if ((client as any).crypto && (client as any).crypto.downloadKeys) {
+            await (client as any).crypto.downloadKeys([targetUserId]);
+          }
+        } catch (keyErr) {
+          console.warn("Failed to pre-download keys on join:", keyErr);
+        }
+      }
+
+      // Automatically send a secure ping message to exchange E2EE Megolm keys
+      try {
+        await client.sendTextMessage(roomId, "👋 Connected! We can now chat securely.");
+      } catch (msgErr) {
+        console.warn("Failed to send welcome E2EE sync message:", msgErr);
+      }
+
       updateLists();
       onSelectRoom(roomId);
     } catch (err: any) {
