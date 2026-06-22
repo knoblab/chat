@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
-import { UserPlus, Check, X, Search, Clock, User } from 'lucide-react';
+import { UserPlus, Check, X, Search, Clock, User, LogOut } from 'lucide-react';
 
 interface FriendListProps {
   onSelectRoom: (roomId: string) => void;
@@ -16,6 +16,24 @@ interface SearchResult {
 
 export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRoomId }) => {
   const { client } = useMatrix();
+
+  const handleLeaveDM = async (e: React.MouseEvent, roomId: string) => {
+    e.stopPropagation();
+    if (!client) return;
+    if (!confirm('Are you sure you want to remove this friend conversation?')) return;
+
+    try {
+      await client.leave(roomId);
+      await client.forget(roomId);
+      if (selectedRoomId === roomId) {
+        onSelectRoom('');
+      }
+      updateLists();
+    } catch (err: any) {
+      console.error('Failed to remove friend DM:', err);
+      alert(err.message || 'Failed to remove conversation');
+    }
+  };
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,24 +124,31 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
 
     try {
       const query = searchQuery.trim();
-      const myUserId = client.getUserId();
+      const myUserId = client.getUserId() || '';
 
-      // Enforce exact Matrix User ID format
-      if (!query.startsWith('@') || !query.includes(':')) {
-        setSearchError('Please enter a complete Matrix User ID (e.g. @username:server).');
-        return;
+      // Resolve 5-char code to full Matrix User ID based on current user's homeserver
+      let targetUserId = query;
+      if (!query.startsWith('@') && !query.includes(':')) {
+        if (query.length === 5) {
+          const colonIndex = myUserId.indexOf(':');
+          const suffix = colonIndex !== -1 ? myUserId.substring(colonIndex) : ':qpi.digital';
+          targetUserId = `@${query.toLowerCase()}${suffix}`;
+        } else {
+          setSearchError('Please enter a valid 5-character User ID code.');
+          return;
+        }
       }
 
-      if (query === myUserId) {
+      if (targetUserId === myUserId) {
         setSearchError('You cannot add yourself as a friend.');
         return;
       }
 
       // Lookup the profile of the exact Matrix ID to confirm existence
       try {
-        const profile = await client.getProfileInfo(query);
+        const profile = await client.getProfileInfo(targetUserId);
         setSearchResults([{
-          userId: query,
+          userId: targetUserId,
           displayName: profile.displayname || undefined,
           avatarUrl: profile.avatar_url || undefined
         }]);
@@ -228,7 +253,7 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
           <input
             type="text"
             className="pdf-input pdf-input-sm pdf-font-mono"
-            placeholder="Exact Matrix ID (@user:server)..."
+            placeholder="Enter 5-character Code..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{ paddingLeft: '32px' }}
@@ -378,6 +403,14 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
                           {info.userId}
                         </div>
                       </div>
+                      <button 
+                        onClick={(e) => handleLeaveDM(e, room.roomId)}
+                        className="pdf-secondary-btn pdf-btn-xs"
+                        style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', flexShrink: 0, opacity: 0.7, border: 'none', background: 'transparent' }}
+                        title="Remove Friend DM"
+                      >
+                        <LogOut size={12} style={{ color: 'var(--color-functional-red)' }} />
+                      </button>
                     </div>
                   </div>
                 );

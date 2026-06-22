@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MatrixEvent, Room, MsgType } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
-import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft } from 'lucide-react';
+import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft, Trash2, Edit2 } from 'lucide-react';
 
 interface ChatRoomProps {
   roomId: string;
@@ -16,6 +16,7 @@ interface Message {
   isEncrypted: boolean;
   msgtype?: string;
   url?: string;
+  isEdited?: boolean;
 }
 
 interface SearchResult {
@@ -42,6 +43,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  
+  // Message edit states
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
   
   // Room Name State
   const [isEditingName, setIsEditingName] = useState(false);
@@ -73,9 +78,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
       if (!r) return;
       const timeline = r.getLiveTimeline().getEvents();
       const msgs = timeline
-        .filter(event => event.getType() === 'm.room.message')
+        .filter(event => {
+          if (event.getType() !== 'm.room.message') return false;
+          if (event.isRedacted()) return false;
+          const relation = event.getRelation();
+          if (relation && relation.rel_type === 'm.replace') return false;
+          return true;
+        })
         .map(event => {
-          const content = event.getContent();
+          const replacingEvent = event.replacingEvent();
+          const content = replacingEvent ? replacingEvent.getContent() : event.getContent();
           return {
             id: event.getId() || Math.random().toString(),
             sender: event.getSender() || 'Unknown',
@@ -83,7 +95,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
             msgtype: content.msgtype || 'm.text',
             url: content.url || '',
             timestamp: event.getTs(),
-            isEncrypted: event.isEncrypted()
+            isEncrypted: event.isEncrypted(),
+            isEdited: !!replacingEvent
           };
         });
       setMessages(msgs);
@@ -124,6 +137,54 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     } catch (err) {
       console.error('Failed to send message:', err);
       setInputText(text); // restore on fail
+    }
+  };
+
+  const handleDeleteMessage = async (eventId: string) => {
+    if (!client) return;
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    try {
+      await client.redactEvent(roomId, eventId);
+    } catch (err: any) {
+      console.error('Failed to delete message:', err);
+      alert(err.message || 'Failed to delete message');
+    }
+  };
+
+  const handleStartEdit = (msgId: string, currentText: string) => {
+    setEditingMessageId(msgId);
+    setEditingText(currentText);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingText('');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingText.trim() || !client || !editingMessageId) return;
+
+    const text = editingText;
+    const eventId = editingMessageId;
+    handleCancelEdit();
+
+    try {
+      await client.sendMessage(roomId, {
+        msgtype: MsgType.Text,
+        body: `* ${text}`,
+        'm.new_content': {
+          msgtype: MsgType.Text,
+          body: text
+        },
+        'm.relates_to': {
+          rel_type: 'm.replace' as any,
+          event_id: eventId
+        } as any
+      });
+    } catch (err: any) {
+      console.error('Failed to edit message:', err);
+      alert('Failed to edit message');
     }
   };
 
@@ -369,41 +430,86 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
               <div className="pdf-text-copy-13-mono pdf-text-muted">
                 {room.getMember(msg.sender)?.name || msg.sender}
               </div>
-              <div 
-                className="pdf-panel pdf-selectable" 
-                style={{
-                  background: isMe ? 'var(--color-functional-red)' : 'var(--color-bg-secondary)',
-                  color: isMe ? 'var(--color-bg-primary)' : 'var(--color-text-primary)',
-                  borderColor: isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)',
-                  padding: msg.msgtype === 'm.image' ? 'var(--space-050)' : 'var(--space-100) var(--space-150)',
-                  borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                  boxShadow: isMe ? 'none' : 'var(--shadow-hardware-bevel)',
-                  marginBottom: 0,
-                  maxWidth: '100%'
-                }}
-              >
-                {msg.msgtype === 'm.image' && msg.url ? (
-                  <div>
-                    <img 
-                      src={client ? mxcToHttp(msg.url, client.baseUrl, client.getAccessToken() || undefined) : ''} 
-                      alt={msg.body} 
-                      className="pdf-radius-sm"
-                      style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: 'pointer' }}
-                      onClick={() => {
-                        const httpUrl = client ? mxcToHttp(msg.url || '', client.baseUrl, client.getAccessToken() || undefined) : '';
-                        if (httpUrl) window.open(httpUrl, '_blank');
-                      }}
-                    />
-                    <div className="pdf-text-copy-13-mono pdf-mt-100" style={{ 
-                      fontSize: '11px', 
-                      color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)',
-                      padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
-                    }}>
-                      {msg.body}
+              <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '100%' }}>
+                <div 
+                  className="pdf-panel pdf-selectable" 
+                  style={{
+                    background: isMe ? 'var(--color-functional-red)' : 'var(--color-bg-secondary)',
+                    color: isMe ? 'var(--color-bg-primary)' : 'var(--color-text-primary)',
+                    borderColor: isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)',
+                    padding: msg.msgtype === 'm.image' ? 'var(--space-050)' : 'var(--space-100) var(--space-150)',
+                    borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                    boxShadow: isMe ? 'none' : 'var(--shadow-hardware-bevel)',
+                    marginBottom: 0,
+                    maxWidth: '100%',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                >
+                  {msg.msgtype === 'm.image' && msg.url ? (
+                    <div>
+                      <img 
+                        src={client ? mxcToHttp(msg.url, client.baseUrl, client.getAccessToken() || undefined) : ''} 
+                        alt={msg.body} 
+                        className="pdf-radius-sm"
+                        style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: 'pointer' }}
+                        onClick={() => {
+                          const httpUrl = client ? mxcToHttp(msg.url || '', client.baseUrl, client.getAccessToken() || undefined) : '';
+                          if (httpUrl) window.open(httpUrl, '_blank');
+                        }}
+                      />
+                      <div className="pdf-text-copy-13-mono pdf-mt-100" style={{ 
+                        fontSize: '11px', 
+                        color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)',
+                        padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
+                      }}>
+                        {msg.body}
+                      </div>
                     </div>
+                  ) : (
+                    msg.body
+                  )}
+                  {msg.isEdited && (
+                    <span style={{ 
+                      fontSize: '9px', 
+                      alignSelf: 'flex-end',
+                      marginTop: '4px',
+                      opacity: 0.6,
+                      fontStyle: 'italic',
+                      color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'
+                    }}>
+                      (edited)
+                    </span>
+                  )}
+                </div>
+                {isMe && msg.msgtype !== 'm.image' && (
+                  <div className="pdf-flex-row pdf-gap-050" style={{ opacity: 0.7, flexShrink: 0 }}>
+                    <button 
+                      onClick={() => handleStartEdit(msg.id, msg.body)} 
+                      style={{ color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+                      title="Edit Message"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteMessage(msg.id)} 
+                      style={{ color: 'var(--color-functional-red)', cursor: 'pointer' }}
+                      title="Delete Message"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
-                ) : (
-                  msg.body
+                )}
+                {isMe && msg.msgtype === 'm.image' && (
+                  <div className="pdf-flex-row pdf-gap-050" style={{ opacity: 0.7, flexShrink: 0 }}>
+                    <button 
+                      onClick={() => handleDeleteMessage(msg.id)} 
+                      style={{ color: 'var(--color-functional-red)', cursor: 'pointer' }}
+                      title="Delete Image"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -412,16 +518,32 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Editing Banner */}
+      {editingMessageId && (
+        <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ padding: 'var(--space-100) var(--space-300)', background: 'var(--color-bg-secondary)', borderTop: '1px solid var(--color-border-default)', fontSize: '13px' }}>
+          <span className="pdf-text-muted" style={{ fontStyle: 'italic' }}>
+            Editing message...
+          </span>
+          <button 
+            onClick={handleCancelEdit} 
+            className="pdf-secondary-btn pdf-btn-xs"
+            style={{ border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <X size={14} style={{ color: 'var(--color-functional-red)' }} /> Cancel
+          </button>
+        </div>
+      )}
+
       {/* Input Form */}
       <div className="pdf-border-top" style={{ padding: 'var(--space-200) var(--space-300)', background: 'var(--color-bg-primary)' }}>
-        <form onSubmit={handleSend} className="pdf-flex-row pdf-gap-150">
+        <form onSubmit={editingMessageId ? handleSaveEdit : handleSend} className="pdf-flex-row pdf-gap-150">
           <button 
             type="button" 
             onClick={() => fileInputRef.current?.click()}
             className="pdf-secondary-btn pdf-btn-md"
             style={{ width: '44px', height: '44px', padding: 0, justifyContent: 'center', flexShrink: 0 }}
             title="Upload Image"
-            disabled={uploading}
+            disabled={uploading || !!editingMessageId}
           >
             {uploading ? '...' : <ImageIcon size={18} />}
           </button>
@@ -434,15 +556,20 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
           />
           <input
             type="text"
-            value={inputText}
-            onChange={e => setInputText(e.target.value)}
-            placeholder={uploading ? "Uploading image..." : "Type an encrypted message..."}
+            value={editingMessageId ? editingText : inputText}
+            onChange={e => editingMessageId ? setEditingText(e.target.value) : setInputText(e.target.value)}
+            placeholder={editingMessageId ? "Edit your message..." : (uploading ? "Uploading image..." : "Type an encrypted message...")}
             className="pdf-input pdf-input-md pdf-font-mono"
             style={{ maxWidth: 'none' }}
             disabled={uploading}
+            autoFocus={!!editingMessageId}
           />
-          <button type="submit" disabled={!inputText.trim() || uploading} className="pdf-btn-primary pdf-btn-md">
-            <Send size={16} /> Send
+          <button 
+            type="submit" 
+            disabled={(editingMessageId ? !editingText.trim() : !inputText.trim()) || uploading} 
+            className="pdf-btn-primary pdf-btn-md"
+          >
+            {editingMessageId ? 'Save' : <><Send size={16} /> Send</>}
           </button>
         </form>
       </div>

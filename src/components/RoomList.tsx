@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
-import { Hash } from 'lucide-react';
+import { Hash, LogOut } from 'lucide-react';
 
 interface RoomListProps {
   onSelectRoom: (roomId: string) => void;
@@ -12,29 +12,48 @@ export const RoomList: React.FC<RoomListProps> = ({ onSelectRoom, selectedRoomId
   const { client } = useMatrix();
   const [rooms, setRooms] = useState<Room[]>([]);
 
+  const updateRooms = () => {
+    if (!client) return;
+    const allRooms = client.getVisibleRooms();
+    // Filter out DM rooms (where is_direct is true)
+    const groupRooms = allRooms.filter(room => {
+      const isDirect = room.currentState.getStateEvents('m.room.create', '')?.getContent().is_direct || false;
+      return !isDirect;
+    });
+    setRooms(groupRooms);
+  };
+
+  const handleLeaveRoom = async (e: React.MouseEvent, roomId: string) => {
+    e.stopPropagation();
+    if (!client) return;
+    if (!confirm('Are you sure you want to leave and delete this room?')) return;
+
+    try {
+      await client.leave(roomId);
+      await client.forget(roomId);
+      if (selectedRoomId === roomId) {
+        onSelectRoom('');
+      }
+      updateRooms();
+    } catch (err: any) {
+      console.error('Failed to leave room:', err);
+      alert(err.message || 'Failed to leave room');
+    }
+  };
+
   useEffect(() => {
     if (!client) return;
-
-    const updateRooms = () => {
-      const allRooms = client.getVisibleRooms();
-      // Filter out DM rooms (where is_direct is true or active members <= 2)
-      const groupRooms = allRooms.filter(room => {
-        const isDirect = room.currentState.getStateEvents('m.room.create', '')?.getContent().is_direct || false;
-        const activeMembers = room.getMembers().filter(m => m.membership === 'join' || m.membership === 'invite');
-        const isTwoMember = activeMembers.length <= 2;
-        return !isDirect && !isTwoMember;
-      });
-      setRooms(groupRooms);
-    };
 
     updateRooms();
 
     client.on('Room' as any, updateRooms);
     client.on('Room.name' as any, updateRooms);
+    client.on('Room.myMembership' as any, updateRooms);
 
     return () => {
       client.removeListener('Room' as any, updateRooms);
       client.removeListener('Room.name' as any, updateRooms);
+      client.removeListener('Room.myMembership' as any, updateRooms);
     };
   }, [client]);
 
@@ -68,6 +87,14 @@ export const RoomList: React.FC<RoomListProps> = ({ onSelectRoom, selectedRoomId
                   {room.name || 'Unnamed Room'}
                 </div>
               </div>
+              <button 
+                onClick={(e) => handleLeaveRoom(e, room.roomId)}
+                className="pdf-secondary-btn pdf-btn-xs"
+                style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', flexShrink: 0, opacity: 0.7, border: 'none', background: 'transparent' }}
+                title="Leave & Delete Room"
+              >
+                <LogOut size={12} style={{ color: 'var(--color-functional-red)' }} />
+              </button>
             </div>
           </div>
         ))

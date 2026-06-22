@@ -24,6 +24,28 @@ export const Dashboard: React.FC = () => {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chats' | 'friends'>('chats');
   
+  // Mobile responsive layout states
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [mobileTab, setMobileTab] = useState<'chats' | 'friends' | 'settings'>('chats');
+
+  // Handle mobile resizing
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const getUserCode = (userId: string | null | undefined): string => {
+    if (!userId) return '';
+    const parts = userId.split(':');
+    if (parts.length > 0 && parts[0].startsWith('@')) {
+      return parts[0].substring(1);
+    }
+    return userId;
+  };
+
   // Profile settings state
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [myDisplayName, setMyDisplayName] = useState('');
@@ -249,6 +271,200 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  if (isMobile) {
+    if (selectedRoomId) {
+      return (
+        <div className="pdf-mobile-container">
+          <ChatRoom roomId={selectedRoomId} onBack={() => setSelectedRoomId(null)} />
+        </div>
+      );
+    }
+
+    return (
+      <div className="pdf-mobile-container">
+        {/* Mobile Header */}
+        <header className="pdf-mobile-header">
+          <div className="pdf-text-heading-24 pdf-text-red" style={{ letterSpacing: '-0.02em', fontWeight: 800 }}>QPI Chat</div>
+          <div className="pdf-flex-row pdf-gap-100">
+            <button 
+              onClick={toggleTheme} 
+              className="pdf-secondary-btn pdf-btn-xs"
+              style={{ width: '32px', height: '32px', padding: 0, justifyContent: 'center' }}
+              title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            >
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+          </div>
+        </header>
+
+        {/* Mobile Content Area */}
+        <div className="pdf-mobile-content-area">
+          {mobileTab === 'chats' && (
+            <div className="pdf-flex-col" style={{ padding: 'var(--space-200) 0' }}>
+              <div style={{ padding: '0 var(--space-200) var(--space-200) var(--space-200)' }}>
+                <button onClick={handleCreateRoom} className="pdf-btn-primary pdf-btn-sm pdf-w-full">
+                  <Plus size={16} /> New Encrypted Room
+                </button>
+              </div>
+              <RoomList onSelectRoom={setSelectedRoomId} selectedRoomId={selectedRoomId} />
+            </div>
+          )}
+
+          {mobileTab === 'friends' && (
+            <FriendList onSelectRoom={setSelectedRoomId} selectedRoomId={selectedRoomId} />
+          )}
+
+          {mobileTab === 'settings' && (
+            <div style={{ padding: 'var(--space-300) var(--space-200)' }}>
+              <div className="pdf-panel pdf-shadow-glow" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-200)', background: 'var(--color-bg-primary)' }}>
+                <h3 className="pdf-text-heading-24 pdf-text-red pdf-border-bottom" style={{ paddingBottom: 'var(--space-100)', margin: 0, fontSize: '1.2rem' }}>Profile Settings</h3>
+                
+                {/* Avatar Section */}
+                <div className="pdf-flex-col pdf-items-center" style={{ gap: 'var(--space-100)', padding: 'var(--space-100) 0' }}>
+                  <div style={{ 
+                    width: '80px', height: '80px', 
+                    borderRadius: '50%', background: 'var(--color-bg-secondary)', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--color-functional-red)',
+                    fontWeight: 'bold',
+                    fontSize: '2rem',
+                    border: '2px solid var(--color-border-default)',
+                    overflow: 'hidden',
+                    position: 'relative'
+                  }}>
+                    {myAvatarUrl && client ? (
+                      <img 
+                        src={mxcToHttp(myAvatarUrl, client.baseUrl, client.getAccessToken() || undefined)} 
+                        alt="Avatar" 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      myDisplayName ? myDisplayName.charAt(0).toUpperCase() : 'U'
+                    )}
+                  </div>
+                  <label 
+                    className="pdf-secondary-btn pdf-btn-xs" 
+                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 'var(--space-050)' }}
+                  >
+                    <Upload size={12} /> Upload Photo
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleAvatarUpload} 
+                      style={{ display: 'none' }}
+                      disabled={profileLoading}
+                    />
+                  </label>
+                </div>
+
+                {/* Profile Form */}
+                <form onSubmit={handleSaveProfile} className="pdf-flex-col pdf-gap-150">
+                  <div>
+                    <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block', fontSize: '0.85rem' }}>My User Code (Click to Copy)</label>
+                    <div 
+                      className="pdf-panel pdf-selectable pdf-font-mono" 
+                      onClick={() => {
+                        if (client?.getUserId()) {
+                          const code = getUserCode(client.getUserId());
+                          navigator.clipboard.writeText(code);
+                          alert(`Copied Code (${code}) to clipboard!`);
+                        }
+                      }}
+                      style={{ 
+                        padding: 'var(--space-100)', 
+                        background: 'var(--color-bg-secondary)', 
+                        fontSize: '0.9rem',
+                        wordBreak: 'break-all',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 'var(--space-100)',
+                        cursor: 'pointer',
+                        borderRadius: '6px',
+                        border: '1px solid var(--color-border-default)'
+                      }}
+                    >
+                      <span style={{ flex: 1, userSelect: 'all', WebkitUserSelect: 'all', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{getUserCode(client?.getUserId())}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--color-functional-red)', fontWeight: 600, flexShrink: 0 }}>Copy Code</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block', fontSize: '0.85rem' }}>Nickname</label>
+                    <input 
+                      type="text" 
+                      className="pdf-input pdf-input-sm pdf-font-mono"
+                      value={myDisplayName} 
+                      onChange={e => setMyDisplayName(e.target.value)} 
+                      required 
+                      placeholder="Your Nickname"
+                      disabled={profileLoading}
+                    />
+                  </div>
+
+                  {profileSuccess && (
+                    <div className="pdf-text-copy-14 pdf-text-center" style={{ color: '#10b981', fontWeight: 600 }}>
+                      {profileSuccess}
+                    </div>
+                  )}
+                  {profileError && (
+                    <div className="pdf-text-copy-14 pdf-text-center" style={{ color: 'var(--color-functional-red)' }}>
+                      {profileError}
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit" 
+                    disabled={profileLoading || !myDisplayName.trim()} 
+                    className="pdf-btn-primary pdf-btn-sm pdf-w-full"
+                  >
+                    Save Nickname
+                  </button>
+                </form>
+
+                <div style={{ marginTop: 'var(--space-100)', paddingTop: 'var(--space-200)', borderTop: '1px solid var(--color-border-default)' }}>
+                  <button 
+                    onClick={logout} 
+                    className="pdf-secondary-btn pdf-btn-sm pdf-w-full"
+                    style={{ justifyContent: 'center', gap: 'var(--space-100)', color: 'var(--color-functional-red)', borderColor: 'var(--color-functional-red)' }}
+                  >
+                    <LogOut size={14} /> Logout
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Bottom Navigation */}
+        <nav className="pdf-mobile-bottom-nav">
+          <button 
+            onClick={() => setMobileTab('chats')} 
+            className={`pdf-mobile-tab-btn ${mobileTab === 'chats' ? 'active' : ''}`}
+          >
+            <MessageSquare size={20} />
+            <span>Chats</span>
+          </button>
+          <button 
+            onClick={() => setMobileTab('friends')} 
+            className={`pdf-mobile-tab-btn ${mobileTab === 'friends' ? 'active' : ''}`}
+          >
+            <Users size={20} />
+            <span>Friends</span>
+          </button>
+          <button 
+            onClick={() => setMobileTab('settings')} 
+            className={`pdf-mobile-tab-btn ${mobileTab === 'settings' ? 'active' : ''}`}
+          >
+            <Settings size={20} />
+            <span>Settings</span>
+          </button>
+        </nav>
+      </div>
+    );
+  }
+
   return (
     <div className={`pdf-app ${selectedRoomId ? 'room-selected' : ''}`}>
       {/* Sidebar */}
@@ -449,13 +665,14 @@ export const Dashboard: React.FC = () => {
             {/* Profile Form */}
             <form onSubmit={handleSaveProfile} className="pdf-flex-col pdf-gap-150">
               <div>
-                <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block', fontSize: '0.85rem' }}>My Matrix ID (Click to Copy)</label>
+                <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block', fontSize: '0.85rem' }}>My User Code (Click to Copy)</label>
                 <div 
                   className="pdf-panel pdf-selectable pdf-font-mono" 
                   onClick={() => {
                     if (client?.getUserId()) {
-                      navigator.clipboard.writeText(client.getUserId()!);
-                      alert('Copied Matrix ID to clipboard!');
+                      const code = getUserCode(client.getUserId());
+                      navigator.clipboard.writeText(code);
+                      alert(`Copied Code (${code}) to clipboard!`);
                     }
                   }}
                   style={{ 
@@ -473,8 +690,8 @@ export const Dashboard: React.FC = () => {
                     border: '1px solid var(--color-border-default)'
                   }}
                 >
-                  <span style={{ flex: 1, userSelect: 'all', WebkitUserSelect: 'all' }}>{client?.getUserId()}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--color-functional-red)', fontWeight: 600, flexShrink: 0 }}>Copy</span>
+                  <span style={{ flex: 1, userSelect: 'all', WebkitUserSelect: 'all', fontWeight: 'bold' }}>{getUserCode(client?.getUserId())}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--color-functional-red)', fontWeight: 600, flexShrink: 0 }}>Copy Code</span>
                 </div>
               </div>
 
