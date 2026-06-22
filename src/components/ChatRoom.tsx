@@ -111,7 +111,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
       const timeline = r.getLiveTimeline().getEvents();
       const msgs = timeline
         .filter(event => {
-          if (event.getType() !== 'm.room.message') return false;
+          const type = event.getType();
+          if (type !== 'm.room.message' && type !== 'm.room.encrypted') return false;
           if (event.isRedacted()) return false;
           // Filter out edit replacement events (m.replace)
           const content = event.getContent();
@@ -127,7 +128,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
           let url: string;
           let isEdited = false;
 
-          if (replacingEvent) {
+          if (event.getType() === 'm.room.encrypted') {
+            body = '🔒 Unable to decrypt message';
+            msgtype = 'm.text';
+            url = '';
+          } else if (replacingEvent) {
             // SDK has linked the edit event
             const rc = replacingEvent.getContent();
             const newContent = rc['m.new_content'] || rc;
