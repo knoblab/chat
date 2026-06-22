@@ -28,7 +28,6 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
   // Lists
   const [friends, setFriends] = useState<Room[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<Room[]>([]);
-  const [sentRequests, setSentRequests] = useState<Room[]>([]);
 
   // Update lists from rooms
   const updateLists = () => {
@@ -71,8 +70,8 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
     });
 
     setIncomingRequests(incoming);
-    setSentRequests(sent);
-    setFriends(active);
+    // Merge sent and active into friends
+    setFriends([...active, ...sent]);
   };
 
   useEffect(() => {
@@ -153,21 +152,24 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
 
     try {
       // 1. Check if we already have a DM with this user
+      const myId = client.getUserId();
       const existing = friends.find(room => 
-        room.getMembers().some(m => m.userId === targetUserId)
-      ) || sentRequests.find(room => 
-        room.getMembers().some(m => m.userId === targetUserId)
+        room.getMembers().some(m => m.userId === targetUserId && m.userId !== myId)
       ) || incomingRequests.find(room => 
-        room.getMembers().some(m => m.userId === targetUserId)
+        room.getMembers().some(m => m.userId === targetUserId && m.userId !== myId)
       );
 
       if (existing) {
-        alert('A connection (or pending request) with this user already exists.');
+        // Just open the existing room
+        setSearchQuery('');
+        setSearchResults([]);
+        onSelectRoom(existing.roomId);
+        if (onSwitchToChats) onSwitchToChats();
         return;
       }
 
       // 2. Create direct encrypted room
-      await client.createRoom({
+      const res = await client.createRoom({
         preset: 'trusted_private_chat' as any,
         invite: [targetUserId],
         is_direct: true,
@@ -182,10 +184,15 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
         ],
       });
 
-      alert('Friend request sent!');
       setSearchQuery('');
       setSearchResults([]);
       updateLists();
+      
+      // Immediately select the newly created DM
+      if (res.room_id) {
+        onSelectRoom(res.room_id);
+        if (onSwitchToChats) onSwitchToChats();
+      }
     } catch (err: any) {
       console.error('Add friend error:', err);
       alert(err.message || 'Failed to send friend request');
@@ -374,35 +381,10 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
           </div>
         )}
 
-        {/* Sent Requests (Pending) */}
-        {sentRequests.length > 0 && (
-          <div>
-            <div className="pdf-text-label-16 pdf-text-muted pdf-mb-100">
-              Sent Requests ({sentRequests.length})
-            </div>
-            <div className="pdf-flex-col pdf-gap-100">
-              {sentRequests.map(room => {
-                const info = getOtherMemberInfo(room);
-                return (
-                  <div key={room.roomId} className="pdf-panel pdf-flex-row pdf-items-center pdf-justify-between" style={{ padding: 'var(--space-100)', marginBottom: 0, opacity: 0.8 }}>
-                    <div style={{ overflow: 'hidden', marginRight: 'var(--space-100)' }}>
-                      <div className="pdf-text-label-16" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>{info.name}</div>
-                      <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginTop: '2px' }}>{info.userId}</div>
-                    </div>
-                    <div className="pdf-text-copy-13-mono pdf-text-muted pdf-flex-row pdf-items-center pdf-gap-050" style={{ flexShrink: 0, fontSize: '0.75rem' }}>
-                      <Clock size={12} /> Pending
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Friends List */}
+        {/* Friends List (Merged DMs) */}
         <div>
           <div className="pdf-text-label-16 pdf-text-muted pdf-mb-100">
-            Friends ({friends.length})
+            Chats ({friends.length})
           </div>
           {friends.length === 0 ? (
             <div className="pdf-flex-col pdf-justify-center pdf-items-center" style={{ padding: 'var(--space-300)', border: '1px dashed var(--color-border-default)', borderRadius: '8px' }}>

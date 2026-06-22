@@ -590,7 +590,7 @@ export const Dashboard: React.FC = () => {
       <main className="pdf-main-view">
         <div className="pdf-main-content" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {selectedRoomId ? (
-            <ChatRoom roomId={selectedRoomId} onBack={() => setSelectedRoomId(null)} />
+            <ChatRoom roomId={selectedRoomId} onBack={() => setSelectedRoomId(null)} onSelectRoom={setSelectedRoomId} />
           ) : (
             <div className="pdf-flex-col pdf-justify-center pdf-items-center pdf-h-full pdf-selectable" style={{ color: 'var(--color-text-secondary)', minHeight: '80vh' }}>
               <div className="pdf-panel pdf-shadow-glow" style={{ padding: 'var(--space-400)', textAlign: 'center', maxWidth: '400px' }}>

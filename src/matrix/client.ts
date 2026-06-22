@@ -125,44 +125,44 @@ export const initMatrixClient = async (
   // Start syncing with larger limit for history
   await matrixClient.startClient({ initialSyncLimit: 30 });
 
-  // When sync completes, pre-download crypto keys for all room members
-  matrixClient.once('sync' as any, async (state: string) => {
-    if (state === 'PREPARED' || state === 'SYNCING') {
-      try {
-        const rooms = matrixClient!.getVisibleRooms();
-        const allUserIds = new Set<string>();
-        rooms.forEach(room => {
-          if (matrixClient!.isRoomEncrypted(room.roomId)) {
-            room.getMembers().forEach(m => {
-              if (m.membership === 'join') {
-                allUserIds.add(m.userId);
-              }
-            });
+  return new Promise<MatrixClient>((resolve) => {
+    matrixClient!.once('sync' as any, async (state: string) => {
+      if (state === 'PREPARED' || state === 'SYNCING') {
+        try {
+          const rooms = matrixClient!.getVisibleRooms();
+          const allUserIds = new Set<string>();
+          rooms.forEach(room => {
+            if (matrixClient!.isRoomEncrypted(room.roomId)) {
+              room.getMembers().forEach(m => {
+                if (m.membership === 'join') {
+                  allUserIds.add(m.userId);
+                }
+              });
+            }
+          });
+          
+          if (allUserIds.size > 0) {
+            const crypto = matrixClient!.getCrypto();
+            if (crypto) {
+              await crypto.getUserDeviceInfo(Array.from(allUserIds), true);
+              console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users via Rust crypto`);
+            } else if ((matrixClient as any).downloadKeys) {
+              await (matrixClient as any).downloadKeys(Array.from(allUserIds));
+              console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users via legacy crypto`);
+            }
           }
-        });
-        
-        if (allUserIds.size > 0) {
-          const crypto = matrixClient!.getCrypto();
-          if (crypto) {
-            // Rust crypto: getUserDeviceInfo downloads and caches device keys
-            await crypto.getUserDeviceInfo(Array.from(allUserIds), true);
-            console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users via Rust crypto`);
-          } else if ((matrixClient as any).downloadKeys) {
-            // Legacy fallback
-            await (matrixClient as any).downloadKeys(Array.from(allUserIds));
-            console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users via legacy crypto`);
-          }
+        } catch (err) {
+          console.warn('Failed to pre-download crypto keys:', err);
         }
-      } catch (err) {
-        console.warn('Failed to pre-download crypto keys:', err);
+
+        // Auto-join/create general room in background
+        joinOrCreateGeneralRoom(matrixClient!, userId);
+        
+        // Resolve only when sync is ready
+        resolve(matrixClient!);
       }
-    }
+    });
   });
-
-  // Auto-join/create general room in background
-  joinOrCreateGeneralRoom(matrixClient, userId);
-
-  return matrixClient;
 };
 
 export const getMatrixClient = (): MatrixClient | null => {

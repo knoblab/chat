@@ -2,11 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { MatrixEvent, Room, MsgType, Preset } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { AuthImage, isRoomDirect } from './AuthImage';
-import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft, Trash2, Edit2 } from 'lucide-react';
+import { HOMESERVER_URL } from '../matrix/client';
+import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft, Trash2, Edit2, Download } from 'lucide-react';
 
 interface ChatRoomProps {
   roomId: string;
   onBack?: () => void;
+  onSelectRoom?: (roomId: string) => void;
 }
 
 interface Message {
@@ -39,11 +41,29 @@ export const mxcToHttp = (mxcUrl: string, baseUrl: string, accessToken?: string)
   return url;
 };
 
-export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
+export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom }) => {
   const { client } = useMatrix();
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  
+  // Scroll and Pill states
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [showNewMsgPill, setShowNewMsgPill] = useState(false);
+
+  const scrollToBottom = (behavior: 'auto' | 'smooth' = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+    setShowNewMsgPill(false);
+  };
+
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 50) {
+      setShowNewMsgPill(false);
+    }
+  };
   
   // Message edit states
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -76,7 +96,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -147,6 +166,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     const handleTimelineEvent = (event: MatrixEvent) => {
       if (event.getRoomId() === roomId) {
         updateMessages();
+        
+        if (messagesContainerRef.current) {
+          const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+          // If we are significantly scrolled up, show pill instead of auto-scrolling
+          if (scrollHeight - scrollTop - clientHeight > 100) {
+            setShowNewMsgPill(true);
+          } else {
+            setTimeout(() => scrollToBottom('smooth'), 50);
+          }
+        } else {
+          setTimeout(() => scrollToBottom('smooth'), 50);
+        }
         if (event.getType() === 'm.room.name' && r) {
           setNewRoomName(r.name || '');
         }
@@ -215,16 +246,38 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     }
   };
 
-  const handleProfileClick = async (userId: string) => {
-    if (!client || userId === client.getUserId()) return;
-    if (!confirm(`Send friend request to ${userId}?`)) return;
+  const handleProfileClick = async (targetUserId: string) => {
+    if (!client || targetUserId === client.getUserId()) return;
+    
+    // Check if we already have a DM
+    const myId = client.getUserId();
+    const rooms = client.getVisibleRooms();
+    const existing = rooms.find(r => 
+      isRoomDirect(client, r.roomId) && 
+      r.getMembers().some(m => m.userId === targetUserId && m.userId !== myId)
+    );
+
+    if (existing) {
+      if (onSelectRoom) onSelectRoom(existing.roomId);
+      return;
+    }
+
     try {
-      await client.createRoom({
+      const res = await client.createRoom({
         is_direct: true,
-        invite: [userId],
-        preset: Preset.TrustedPrivateChat
+        invite: [targetUserId],
+        preset: Preset.TrustedPrivateChat,
+        initial_state: [
+          {
+            type: 'm.room.encryption',
+            state_key: '',
+            content: { algorithm: 'm.megolm.v1.aes-sha2' },
+          },
+        ]
       });
-      alert(`Sent friend request / DM invite to ${userId}`);
+      if (res.room_id && onSelectRoom) {
+        onSelectRoom(res.room_id);
+      }
     } catch (err: any) {
       console.error("Failed to add friend:", err);
       alert("Failed to add friend: " + err.message);
@@ -412,6 +465,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   }
 
   const isDirect = client ? isRoomDirect(client, roomId) : false;
+  const myId = client?.getUserId();
+  const otherMembers = room?.getMembers().filter(m => m.userId !== myId);
+  const isPending = isDirect && otherMembers && otherMembers.length > 0 && otherMembers.every(m => m.membership === 'invite');
+
+  // Initial load auto-scroll
+  useEffect(() => {
+    setTimeout(() => scrollToBottom('auto'), 100);
+  }, [roomId, room]);
 
   return (
     <div className="pdf-flex-col pdf-h-full" style={{ flex: 1 }}>
@@ -494,11 +555,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
       </div>
 
       {/* Messages */}
-      <div className="pdf-flex-col pdf-gap-150" style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-300)' }}>
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="pdf-flex-col pdf-gap-150" 
+        style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-300)', position: 'relative' }}
+      >
         {messages.map((msg, idx) => {
           const isMe = msg.sender === client?.getUserId();
           const prevMsg = idx > 0 ? messages[idx - 1] : null;
           const showProfile = !isMe && (!prevMsg || prevMsg.sender !== msg.sender || msg.timestamp - prevMsg.timestamp > 300000); // 5 min gap
+          const formattedTime = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
           return (
             <div key={msg.id} className="animate-message" style={{
@@ -567,43 +634,77 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
                   }}
                 >
                   {msg.msgtype === 'm.image' && msg.url ? (
-                    <div>
+                    <div style={{ position: 'relative' }}>
                       <AuthImage 
                         mxcUrl={msg.url}
                         alt={msg.body} 
                         className="pdf-radius-sm"
                         style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: 'pointer' }}
                       />
-                      <div className="pdf-text-copy-13-mono pdf-mt-100" style={{ 
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const url = mxcToHttp(msg.url!, HOMESERVER_URL, client?.getAccessToken() || undefined);
+                          window.open(url, '_blank');
+                        }}
+                        style={{
+                          position: 'absolute', top: 4, right: 4,
+                          background: 'rgba(0,0,0,0.5)', color: '#fff',
+                          border: 'none', borderRadius: '4px', padding: '4px',
+                          cursor: 'pointer', display: 'flex', alignItems: 'center'
+                        }}
+                        title="Download Image"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <div className="pdf-text-copy-13-mono pdf-mt-100 pdf-flex-row pdf-items-center pdf-justify-between" style={{ 
                         fontSize: '11px', 
                         color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)',
                         padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
                       }}>
-                        {msg.body}
+                        <span>{msg.body}</span>
+                        <span>{formattedTime}</span>
                       </div>
                     </div>
                   ) : (
-                    msg.body
-                  )}
-                  {msg.isEdited && (
-                    <span style={{ 
-                      fontSize: '9px', 
-                      alignSelf: 'flex-end',
-                      marginTop: '4px',
-                      opacity: 0.6,
-                      fontStyle: 'italic',
-                      color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'
-                    }}>
-                      (edited)
-                    </span>
+                    <div className="pdf-flex-col">
+                      <span>{msg.body}</span>
+                      <div style={{ 
+                        fontSize: '10px', 
+                        alignSelf: 'flex-end',
+                        marginTop: '4px',
+                        opacity: 0.6,
+                        color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'
+                      }}>
+                        {formattedTime} {msg.isEdited && <i>(edited)</i>}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
             </div>
           );
         })}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} style={{ height: '1px' }} />
       </div>
+
+      {/* New Message Pill */}
+      {showNewMsgPill && (
+        <div style={{ position: 'absolute', bottom: '100px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
+          <button 
+            onClick={() => scrollToBottom('smooth')}
+            className="pdf-shadow-glow"
+            style={{ 
+              background: 'var(--color-functional-red)', color: '#fff', 
+              border: 'none', borderRadius: '16px', padding: 'var(--space-050) var(--space-150)',
+              fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(239,68,68,0.4)'
+            }}
+          >
+            New message 👇
+          </button>
+        </div>
+      )}
 
       {/* Context Menu Overlay */}
       {contextMenu && (
@@ -685,8 +786,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
           />
           <input
             type="text"
+            className="pdf-input"
             value={editingMessageId ? editingText : inputText}
-            onChange={e => {
+            onChange={(e) => {
               if (editingMessageId) {
                 setEditingText(e.target.value);
               } else {
@@ -694,15 +796,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
                 client?.sendTyping(roomId, true, 3000);
               }
             }}
-            placeholder={editingMessageId ? "Edit your message..." : (uploading ? "Uploading image..." : "Type an encrypted message...")}
-            className="pdf-input pdf-input-md pdf-font-mono"
-            style={{ maxWidth: 'none' }}
-            disabled={uploading}
+            placeholder={isPending ? "Waiting for them to accept..." : (editingMessageId ? "Edit your message..." : "Type your message...")}
+            style={{ flex: 1 }}
+            disabled={isPending || uploading}
             autoFocus={!!editingMessageId}
           />
           <button 
             type="submit" 
-            disabled={(editingMessageId ? !editingText.trim() : !inputText.trim()) || uploading} 
+            disabled={(editingMessageId ? !editingText.trim() : !inputText.trim()) || uploading || isPending} 
             className="pdf-btn-primary pdf-btn-md"
           >
             {editingMessageId ? 'Save' : <><Send size={16} /> Send</>}

@@ -23,7 +23,8 @@ const generate5CharId = (uid: string): string => {
     temp = Math.floor(temp / 36);
   }
 
-  return firstChar + rest;
+  // Force v2 to effectively reset old accounts with f_ or other messy prefixes
+  return firstChar + rest + '_v2';
 };
 
 export const Auth: React.FC = () => {
