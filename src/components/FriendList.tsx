@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
+import { isRoomDirect } from './AuthImage';
 import { UserPlus, Check, X, Search, Clock, User, MessageSquare, Trash2 } from 'lucide-react';
 
 interface FriendListProps {
@@ -43,12 +44,12 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
       // Get active members (joined or invited)
       const members = room.getMembers().filter(m => m.membership === 'join' || m.membership === 'invite');
       
-      // Heuristic: DMs are private rooms with exactly 2 active members (ourselves and the target user)
-      const isTwoMember = members.length <= 2;
-      const isDirect = room.currentState.getStateEvents('m.room.create', '')?.getContent().is_direct || false;
+      // Use m.direct account data for proper DM detection
+      const isDirect = isRoomDirect(client, room.roomId);
+      // Also check incoming DM invites (not yet in m.direct)
+      const isDmInvite = !!room.getDMInviter();
       
-      // Only treat it as DM if it's marked direct or is a private 1-to-1
-      if (isDirect || isTwoMember) {
+      if (isDirect || isDmInvite) {
         const myMembership = room.getMyMembership();
 
         if (myMembership === 'invite') {
@@ -202,10 +203,12 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
       if (members.length > 0) {
         const targetUserId = members[0].userId;
         try {
-          if ((client as any).downloadKeys) {
+          // Rust crypto: use getUserDeviceInfo to download and cache device keys
+          const crypto = client.getCrypto();
+          if (crypto) {
+            await crypto.getUserDeviceInfo([targetUserId], true);
+          } else if ((client as any).downloadKeys) {
             await (client as any).downloadKeys([targetUserId]);
-          } else if ((client as any).crypto && (client as any).crypto.downloadKeys) {
-            await (client as any).crypto.downloadKeys([targetUserId]);
           }
         } catch (keyErr) {
           console.warn("Failed to pre-download keys on join:", keyErr);

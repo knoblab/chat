@@ -4,6 +4,7 @@ import { Preset } from 'matrix-js-sdk';
 import { RoomList } from '../components/RoomList';
 import { FriendList } from '../components/FriendList';
 import { ChatRoom } from '../components/ChatRoom';
+import { AuthImage } from '../components/AuthImage';
 import { LogOut, Plus, MessageSquare, Users, Sun, Moon, Settings, X, Upload } from 'lucide-react';
 
 export const mxcToHttp = (mxcUrl: string, baseUrl: string, accessToken?: string): string => {
@@ -333,8 +334,8 @@ export const Dashboard: React.FC = () => {
                     position: 'relative'
                   }}>
                     {myAvatarUrl && client ? (
-                      <img 
-                        src={mxcToHttp(myAvatarUrl, client.baseUrl, client.getAccessToken() || undefined)} 
+                      <AuthImage 
+                        mxcUrl={myAvatarUrl}
                         alt="Avatar" 
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
@@ -638,8 +639,8 @@ export const Dashboard: React.FC = () => {
                 position: 'relative'
               }}>
                 {myAvatarUrl && client ? (
-                  <img 
-                    src={mxcToHttp(myAvatarUrl, client.baseUrl, client.getAccessToken() || undefined)} 
+                  <AuthImage 
+                    mxcUrl={myAvatarUrl}
                     alt="Avatar" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />

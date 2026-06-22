@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
+import { isRoomDirect } from './AuthImage';
 import { Hash, LogOut, Lock } from 'lucide-react';
 
 interface RoomListProps {
@@ -37,7 +38,7 @@ export const RoomList: React.FC<RoomListProps> = ({ onSelectRoom, selectedRoomId
         return room.getMyMembership() === 'join';
       })
       .map(room => {
-        const isDirect = room.currentState.getStateEvents('m.room.create', '')?.getContent().is_direct || false;
+        const isDirect = isRoomDirect(client, room.roomId);
 
         // For DM rooms: check if the other member has actually joined
         // (if they haven't, it's a pending sent request — skip it)

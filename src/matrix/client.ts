@@ -102,7 +102,16 @@ export const initMatrixClient = async (
     // Initialize Rust crypto layer for E2EE support
     await matrixClient.initRustCrypto();
     
-    // Automatically trust all devices to allow E2EE message key sharing with unverified devices
+    // Configure trust: allow sending to unverified devices
+    const crypto = matrixClient.getCrypto();
+    if (crypto) {
+      // Rust crypto: disable blacklisting unverified devices
+      if ('globalBlacklistUnverifiedDevices' in crypto) {
+        (crypto as any).globalBlacklistUnverifiedDevices = false;
+      }
+    }
+    
+    // Legacy JS crypto fallbacks (kept for compatibility)
     if ((matrixClient as any).setGlobalErrorOnUnknownDevices) {
       (matrixClient as any).setGlobalErrorOnUnknownDevices(false);
     }
@@ -131,9 +140,18 @@ export const initMatrixClient = async (
             });
           }
         });
-        if (allUserIds.size > 0 && (matrixClient as any).downloadKeys) {
-          await (matrixClient as any).downloadKeys(Array.from(allUserIds));
-          console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users`);
+        
+        if (allUserIds.size > 0) {
+          const crypto = matrixClient!.getCrypto();
+          if (crypto) {
+            // Rust crypto: getUserDeviceInfo downloads and caches device keys
+            await crypto.getUserDeviceInfo(Array.from(allUserIds), true);
+            console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users via Rust crypto`);
+          } else if ((matrixClient as any).downloadKeys) {
+            // Legacy fallback
+            await (matrixClient as any).downloadKeys(Array.from(allUserIds));
+            console.log(`Pre-downloaded crypto keys for ${allUserIds.size} users via legacy crypto`);
+          }
         }
       } catch (err) {
         console.warn('Failed to pre-download crypto keys:', err);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MatrixEvent, Room, MsgType } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
+import { AuthImage, isRoomDirect } from './AuthImage';
 import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft, Trash2, Edit2 } from 'lucide-react';
 
 interface ChatRoomProps {
@@ -371,7 +372,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading room...</div>;
   }
 
-  const isDirect = room.currentState.getStateEvents('m.room.create', '')?.getContent().is_direct || false;
+  const isDirect = client ? isRoomDirect(client, roomId) : false;
 
   return (
     <div className="pdf-flex-col pdf-h-full" style={{ flex: 1 }}>
@@ -487,15 +488,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
                 >
                   {msg.msgtype === 'm.image' && msg.url ? (
                     <div>
-                      <img 
-                        src={client ? mxcToHttp(msg.url, client.baseUrl, client.getAccessToken() || undefined) : ''} 
+                      <AuthImage 
+                        mxcUrl={msg.url}
                         alt={msg.body} 
                         className="pdf-radius-sm"
                         style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: 'pointer' }}
-                        onClick={() => {
-                          const httpUrl = client ? mxcToHttp(msg.url || '', client.baseUrl, client.getAccessToken() || undefined) : '';
-                          if (httpUrl) window.open(httpUrl, '_blank');
-                        }}
                       />
                       <div className="pdf-text-copy-13-mono pdf-mt-100" style={{ 
                         fontSize: '11px', 
