@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { Preset } from 'matrix-js-sdk';
 import { RoomList } from '../components/RoomList';
@@ -24,8 +25,27 @@ export const mxcToHttp = (mxcUrl: string, baseUrl: string, accessToken?: string)
 
 export const Dashboard: React.FC = () => {
   const { client, logout } = useMatrix();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chats' | 'friends'>('chats');
+
+  // Handle pending invites after login
+  useEffect(() => {
+    const pendingInvite = sessionStorage.getItem('pendingInvite');
+    if (pendingInvite) {
+      navigate(`/invite/${pendingInvite}`, { replace: true });
+    }
+  }, [navigate]);
+
+  // Handle auto-opening a room passed via router state (from InviteHandler)
+  useEffect(() => {
+    if (location.state && location.state.openRoomId) {
+      setSelectedRoomId(location.state.openRoomId);
+      // Clear the state so it doesn't reopen if they navigate away and back
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
   
   // Mobile responsive layout states
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -285,8 +305,13 @@ export const Dashboard: React.FC = () => {
 
   const handleCreateRoom = async () => {
     if (!client) return;
+    
+    const roomName = window.prompt("새로운 채팅방 이름을 입력하세요:");
+    if (roomName === null) return; // User cancelled
+    
     try {
       const res = await client.createRoom({
+        name: roomName.trim() || 'New Chat Room',
         preset: Preset.PrivateChat,
         initial_state: [
           {

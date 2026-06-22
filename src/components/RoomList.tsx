@@ -66,7 +66,16 @@ export const RoomList: React.FC<RoomListProps> = ({ onSelectRoom, selectedRoomId
         // Get last activity timestamp for sorting
         const timeline = room.getLiveTimeline()?.getEvents();
         const lastEvent = timeline && timeline.length > 0 ? timeline[timeline.length - 1] : null;
-        const lastActivity = lastEvent ? lastEvent.getTs() : 0;
+        
+        let lastActivity = 0;
+        if (lastEvent) {
+          lastActivity = lastEvent.getTs();
+        } else {
+          try {
+            const createEvent = room.currentState.getStateEvents('m.room.create', '');
+            if (createEvent) lastActivity = createEvent.getTs();
+          } catch(e) {}
+        }
 
         return { room, isDirect, displayName, avatarLetter, lastActivity };
       })

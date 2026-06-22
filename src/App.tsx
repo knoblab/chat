@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MatrixProvider, useMatrix } from './matrix/MatrixProvider';
 import { Auth } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
+import { InviteHandler } from './pages/InviteHandler';
+import { MaintenanceGuard } from './components/MaintenanceGuard';
 
 const AppRoutes = () => {
   const { client, isReady } = useMatrix();
@@ -17,13 +19,17 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route 
-        path="/login" 
-        element={!client ? <Auth /> : <Navigate to="/" replace />} 
-      />
+          path="/login" 
+          element={!client ? <Auth /> : <Navigate to="/" replace />} 
+        />
       <Route 
-        path="/" 
-        element={client ? <Dashboard /> : <Navigate to="/login" replace />} 
-      />
+          path="/invite/:roomId" 
+          element={<InviteHandler />} 
+        />
+      <Route 
+          path="/" 
+          element={client ? <Dashboard /> : <Navigate to="/login" replace />} 
+        />
     </Routes>
   );
 };
@@ -31,9 +37,11 @@ const AppRoutes = () => {
 function App() {
   return (
     <MatrixProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <MaintenanceGuard>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </MaintenanceGuard>
     </MatrixProvider>
   );
 }

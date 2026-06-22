@@ -3,7 +3,7 @@ import { MatrixEvent, Room, MsgType } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { AuthImage, isRoomDirect } from './AuthImage';
 import { HOMESERVER_URL } from '../matrix/client';
-import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft, Trash2, Edit2, Download } from 'lucide-react';
+import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft, Trash2, Edit2, Download, Link } from 'lucide-react';
 
 interface ChatRoomProps {
   roomId: string;
@@ -481,6 +481,35 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     }
   };
 
+  const handleShareLink = async () => {
+    if (!client) return;
+    try {
+      // Check current join rules
+      let joinRule = 'invite';
+      try {
+        const stateEvent = client.getRoomStateEvent(roomId, 'm.room.join_rules', '');
+        joinRule = stateEvent ? stateEvent.join_rule : 'invite';
+      } catch (e) {
+        console.warn("Could not fetch join rules, assuming invite");
+      }
+
+      if (joinRule === 'invite') {
+        const confirmShare = window.confirm("링크로 누구나 입장할 수 있게 방 설정을 변경하시겠습니까?");
+        if (!confirmShare) return;
+        
+        await client.sendStateEvent(roomId, 'm.room.join_rules', { join_rule: 'public' }, '');
+      }
+
+      // Generate the link
+      const inviteUrl = `${window.location.origin}/invite/${roomId}`;
+      await navigator.clipboard.writeText(inviteUrl);
+      alert("초대 링크가 클립보드에 복사되었습니다!");
+    } catch (err: any) {
+      console.error('Failed to generate invite link:', err);
+      alert(err.message || '초대 링크를 생성하지 못했습니다.');
+    }
+  };
+
   // Initial load auto-scroll
   useEffect(() => {
     scrollToBottom('auto');
@@ -562,13 +591,23 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
         
         <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)' }}>
           {!isDirect && (
-            <button
-              onClick={() => setIsInviteModalOpen(true)}
-              className="pdf-btn-primary pdf-btn-xs"
-              style={{ background: 'var(--color-functional-red)', color: 'var(--color-bg-primary)', display: 'flex', alignItems: 'center', gap: 'var(--space-050)', height: '28px', padding: '0 var(--space-100)' }}
-            >
-              <UserPlus size={12} /> Invite
-            </button>
+            <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-050)' }}>
+              <button
+                onClick={handleShareLink}
+                className="pdf-btn-primary pdf-btn-xs"
+                style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: 'var(--space-050)', height: '28px', padding: '0 var(--space-100)', border: '1px solid var(--color-border-default)' }}
+                title="Share Link"
+              >
+                <Link size={12} /> Share Link
+              </button>
+              <button
+                onClick={() => setIsInviteModalOpen(true)}
+                className="pdf-btn-primary pdf-btn-xs"
+                style={{ background: 'var(--color-functional-red)', color: 'var(--color-bg-primary)', display: 'flex', alignItems: 'center', gap: 'var(--space-050)', height: '28px', padding: '0 var(--space-100)' }}
+              >
+                <UserPlus size={12} /> Invite
+              </button>
+            </div>
           )}
           {client?.isRoomEncrypted(roomId) && (
             <div className="pdf-badge pdf-text-label-14-mono" style={{ borderColor: '#10b981', color: '#10b981', padding: 'var(--space-050) var(--space-100)', display: 'flex', alignItems: 'center', gap: 'var(--space-050)', height: '28px' }}>
