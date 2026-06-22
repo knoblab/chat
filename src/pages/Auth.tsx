@@ -2,25 +2,22 @@ import React, { useState } from 'react';
 import { createClient } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { HOMESERVER_URL } from '../matrix/client';
-import { LogIn, UserPlus } from 'lucide-react';
+import { auth, googleProvider } from '../firebase';
+import { signInWithPopup } from 'firebase/auth';
 
 export const Auth: React.FC = () => {
   const { login } = useMatrix();
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleRawRegister = async () => {
-    // 1. Initial request to get session
+  const handleRawRegister = async (username: string, pass: string) => {
     let session = '';
     const initialRes = await fetch(`${HOMESERVER_URL}/_matrix/client/v3/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username,
-        password,
+        password: pass,
         initial_device_display_name: 'QPI Chat Web'
       })
     });
@@ -35,13 +32,12 @@ export const Auth: React.FC = () => {
 
     if (!session) throw new Error('Could not get registration session');
 
-    // 2. Complete registration with dummy auth
     const finalRes = await fetch(`${HOMESERVER_URL}/_matrix/client/v3/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username,
-        password,
+        password: pass,
         initial_device_display_name: 'QPI Chat Web',
         auth: {
           type: 'm.login.dummy',
@@ -59,30 +55,54 @@ export const Auth: React.FC = () => {
     return finalData; // { access_token, user_id, device_id }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
     setError('');
-
-    // Prevent numeric-only usernames during registration (reserved for guest users in Synapse)
-    if (!isLogin && /^\d+$/.test(username)) {
-      setError('Username cannot contain only numbers. Please include at least one letter (e.g. user123).');
-      return;
-    }
-
     setLoading(true);
 
     try {
-      if (isLogin) {
-        const tempClient = createClient({ baseUrl: HOMESERVER_URL });
-        const res = await tempClient.loginWithPassword(username, password);
-        await login(res.access_token!, res.user_id!, res.device_id!);
-      } else {
-        const res = await handleRawRegister();
-        await login(res.access_token, res.user_id, res.device_id);
+      // 1. Authenticate with Firebase Google Provider
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      
+      if (!user) throw new Error('Failed to get user profile from Google');
+
+      // 2. Map Firebase UID to Matrix Username (must be lowercase)
+      const matrixUsername = `f_${user.uid.toLowerCase()}`;
+      
+      // Determine secure password for Matrix based on Firebase UID
+      const matrixPassword = `${user.uid}_qpi_secure_salt_2026`;
+
+      const tempClient = createClient({ baseUrl: HOMESERVER_URL });
+      let authResult;
+
+      try {
+        // 3. Try to log in
+        authResult = await tempClient.loginWithPassword(matrixUsername, matrixPassword);
+      } catch (loginErr: any) {
+        // User account likely doesn't exist, auto-register
+        console.log('Matrix account not found. Auto-registering...');
+        try {
+          authResult = await handleRawRegister(matrixUsername, matrixPassword);
+        } catch (regErr: any) {
+          console.error('Matrix auto-registration failed:', regErr);
+          throw regErr;
+        }
       }
+
+      // 4. Set Matrix session
+      await login(authResult.access_token!, authResult.user_id!, authResult.device_id!);
     } catch (err: any) {
-      console.error('Auth Error:', err);
-      setError(err.message || 'Authentication failed. Please check your credentials or network.');
+      console.error('Google Auth Error:', err);
+      // Give descriptive feedback to help users debug env configurations or popup blockages
+      let userFriendlyMessage = err.message || 'Authentication failed.';
+      if (err.code === 'auth/popup-blocked') {
+        userFriendlyMessage = 'Sign-in popup was blocked by your browser. Please allow popups for this site.';
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        userFriendlyMessage = 'The sign-in window was closed before completion. Please try again.';
+      } else if (err.code === 'auth/configuration-not-found' || err.message?.includes('dummy-api-key')) {
+        userFriendlyMessage = 'Firebase is not configured yet. Please enter your Firebase settings in the .env file.';
+      }
+      setError(userFriendlyMessage);
     } finally {
       setLoading(false);
     }
@@ -90,71 +110,67 @@ export const Auth: React.FC = () => {
 
   return (
     <div className="pdf-app pdf-justify-center pdf-items-center" style={{ minHeight: '100vh' }}>
-      <div className="pdf-panel pdf-animate-fade-in" style={{ width: '100%', maxWidth: '400px', padding: 'var(--space-300)', marginBottom: 0 }}>
-        <div className="pdf-panel-header pdf-text-center">
-          <h2 className="pdf-text-heading-24 pdf-text-red">
-            {isLogin ? 'Welcome Back' : 'Join the Matrix'}
-          </h2>
-        </div>
+      <div className="pdf-panel pdf-animate-fade-in" style={{ width: '100%', maxWidth: '400px', padding: 'var(--space-400)', textAlign: 'center', marginBottom: 0 }}>
         
-        <form onSubmit={handleSubmit} className="pdf-flex-col pdf-gap-150">
-          <div>
-            <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block' }}>Username</label>
-            <input 
-              type="text" 
-              className="pdf-input pdf-input-md pdf-font-mono"
-              value={username} 
-              onChange={e => setUsername(e.target.value)} 
-              required 
-              placeholder="e.g. alice"
-            />
-          </div>
-          <div>
-            <label className="pdf-text-label-16 pdf-text-muted pdf-mb-050" style={{ display: 'block' }}>Password</label>
-            <input 
-              type="password" 
-              className="pdf-input pdf-input-md pdf-font-mono"
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              required 
-              placeholder="••••••••"
-            />
-          </div>
+        <div style={{ marginBottom: 'var(--space-300)' }}>
+          <h2 className="pdf-text-heading-32 pdf-text-red" style={{ fontWeight: 800, marginBottom: 'var(--space-050)' }}>QPI Chat</h2>
+          <p className="pdf-text-copy-14 pdf-text-muted">
+            End-to-End Encrypted Messenger
+          </p>
+        </div>
 
-          {error && (
-            <div style={{ 
-              color: 'var(--color-functional-red)', 
-              fontSize: '13px', 
-              textAlign: 'center', 
-              padding: 'var(--space-100)', 
-              background: 'var(--color-red-light)', 
-              borderRadius: '4px',
-              border: '1px solid var(--color-functional-red)'
-            }}>
-              {error}
-            </div>
-          )}
-
+        <div style={{ margin: 'var(--space-300) 0' }}>
           <button 
-            type="submit" 
+            onClick={handleGoogleLogin} 
             disabled={loading} 
-            className="pdf-btn-primary pdf-btn-md pdf-w-full pdf-mt-100"
+            className="pdf-btn-primary pdf-btn-md pdf-w-full"
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: 'var(--space-150)',
+              background: 'var(--color-bg-primary)',
+              color: 'var(--color-text-primary)',
+              border: '1px solid var(--color-border-default)',
+              boxShadow: 'var(--shadow-hardware-bevel)'
+            }}
           >
-            {isLogin ? <LogIn size={16} /> : <UserPlus size={16} />}
-            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Register')}
+            {loading ? (
+              <span className="pdf-text-copy-13-mono pdf-text-muted">Connecting...</span>
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: 'block' }}>
+                  <path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.47h4.84a4.14 4.14 0 0 1-1.8 2.71v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.6z"/>
+                  <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.2l-2.91-2.26c-.8.54-1.83.86-3.05.86-2.34 0-4.33-1.58-5.04-3.7H.94v2.33A9 9 0 0 0 9 18z"/>
+                  <path fill="#FBBC05" d="M3.96 10.7a5.4 5.4 0 0 1 0-3.4V4.97H.94a9 9 0 0 0 0 8.06l3.02-2.33z"/>
+                  <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35L15 2.2C13.46.8 11.43 0 9 0 5.48 0 2.44 2.02.94 4.97l3.02 2.33C4.67 5.16 6.66 3.58 9 3.58z"/>
+                </svg>
+                <span style={{ fontWeight: 600 }}>Continue with Google</span>
+              </>
+            )}
           </button>
-        </form>
+        </div>
 
-        <p className="pdf-text-copy-14 pdf-text-center pdf-text-muted pdf-mt-200">
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <span 
-            className="pdf-text-red pdf-cursor-pointer" 
-            style={{ fontWeight: 600 }}
-            onClick={() => setIsLogin(!isLogin)}
-          >
-            {isLogin ? 'Register' : 'Login'}
-          </span>
-        </p>
+        {error && (
+          <div style={{ 
+            color: 'var(--color-functional-red)', 
+            fontSize: '13px', 
+            textAlign: 'center', 
+            padding: 'var(--space-100)', 
+            background: 'var(--color-red-light)', 
+            borderRadius: '6px',
+            border: '1px solid var(--color-functional-red)',
+            marginTop: 'var(--space-200)',
+            wordBreak: 'break-word'
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div className="pdf-text-copy-13-mono pdf-text-muted pdf-mt-300" style={{ fontSize: '11px' }}>
+          Secure Matrix Protocol • Google Identity
+        </div>
+
       </div>
     </div>
   );
