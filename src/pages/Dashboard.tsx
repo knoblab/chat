@@ -5,7 +5,9 @@ import { RoomList } from '../components/RoomList';
 import { FriendList } from '../components/FriendList';
 import { ChatRoom } from '../components/ChatRoom';
 import { AuthImage } from '../components/AuthImage';
-import { LogOut, Plus, MessageSquare, Users, Sun, Moon, Settings, X, Upload } from 'lucide-react';
+import { auth } from '../firebase';
+import { deleteUser } from 'firebase/auth';
+import { LogOut, Plus, MessageSquare, Users, Sun, Moon, Settings, X, Upload, Trash2 } from 'lucide-react';
 
 export const mxcToHttp = (mxcUrl: string, baseUrl: string, accessToken?: string): string => {
   if (!mxcUrl || !mxcUrl.startsWith('mxc://')) return '';
@@ -94,6 +96,19 @@ export const Dashboard: React.FC = () => {
       });
     }
   }, [client]);
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm("정말로 계정을 탈퇴하시겠습니까? (이 작업은 되돌릴 수 없습니다.)")) return;
+    try {
+      if (auth.currentUser) {
+        await deleteUser(auth.currentUser);
+      }
+      logout();
+    } catch (err: any) {
+      console.error(err);
+      alert("계정 탈퇴에 실패했습니다. (보안을 위해 로그아웃 후 다시 로그인하여 시도해주세요)");
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,6 +465,13 @@ export const Dashboard: React.FC = () => {
                   >
                     <LogOut size={14} /> Logout
                   </button>
+                  <button 
+                    onClick={handleDeleteAccount} 
+                    className="pdf-btn-primary pdf-btn-sm pdf-w-full"
+                    style={{ marginTop: 'var(--space-100)', justifyContent: 'center', gap: 'var(--space-100)', background: 'transparent', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border-default)' }}
+                  >
+                    <Trash2 size={14} /> 계정 탈퇴 (Delete Account)
+                  </button>
                 </div>
               </div>
             </div>
@@ -746,6 +768,16 @@ export const Dashboard: React.FC = () => {
                 Save Nickname
               </button>
             </form>
+
+            <div style={{ marginTop: 'var(--space-100)', paddingTop: 'var(--space-200)', borderTop: '1px solid var(--color-border-default)' }}>
+              <button 
+                onClick={handleDeleteAccount} 
+                className="pdf-btn-primary pdf-btn-sm pdf-w-full"
+                style={{ justifyContent: 'center', gap: 'var(--space-100)', background: 'transparent', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border-default)' }}
+              >
+                <Trash2 size={14} /> 계정 탈퇴 (Delete Account)
+              </button>
+            </div>
           </div>
         </div>
       )}

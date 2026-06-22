@@ -52,6 +52,19 @@ export const MatrixProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     localStorage.removeItem('matrix_user_id');
     localStorage.removeItem('matrix_device_id');
     setClient(null);
+
+    // CRITICAL: Clear Rust Crypto IndexedDB to prevent key corruption between accounts
+    if (window.indexedDB && window.indexedDB.databases) {
+      window.indexedDB.databases().then(dbs => {
+        dbs.forEach(db => {
+          if (db.name) window.indexedDB.deleteDatabase(db.name);
+        });
+      }).catch(err => console.warn('Failed to clear IndexedDB:', err));
+    } else {
+      // Fallback for browsers that don't support databases()
+      window.indexedDB.deleteDatabase('matrix-js-sdk::matrix-rust-sdk');
+      window.indexedDB.deleteDatabase('qpi-matrix-store-v2');
+    }
   };
 
   return (
