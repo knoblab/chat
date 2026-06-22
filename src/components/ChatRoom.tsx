@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MatrixEvent, Room, MsgType } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
-import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search } from 'lucide-react';
+import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft } from 'lucide-react';
 
 interface ChatRoomProps {
   roomId: string;
+  onBack?: () => void;
 }
 
 interface Message {
@@ -23,7 +24,16 @@ interface SearchResult {
   avatarUrl?: string;
 }
 
-export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
+export const mxcToHttp = (mxcUrl: string, baseUrl: string): string => {
+  if (!mxcUrl || !mxcUrl.startsWith('mxc://')) return '';
+  const parts = mxcUrl.substring(6).split('/');
+  if (parts.length < 2) return '';
+  const serverName = parts[0];
+  const mediaId = parts.slice(1).join('/');
+  return `${baseUrl}/_matrix/media/v3/download/${encodeURIComponent(serverName)}/${encodeURIComponent(mediaId)}`;
+};
+
+export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   const { client } = useMatrix();
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -263,6 +273,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
       {/* Header */}
       <div className="pdf-border-bottom pdf-bg-secondary pdf-flex-row pdf-items-center pdf-justify-between" style={{ padding: 'var(--space-150) var(--space-300)', minHeight: '60px' }}>
         <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)', flex: 1, overflow: 'hidden' }}>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="pdf-secondary-btn mobile-back-btn"
+              style={{ 
+                display: 'none',
+                width: '32px', height: '32px', 
+                padding: 0, justifyContent: 'center', 
+                marginRight: 'var(--space-050)',
+                flexShrink: 0
+              }}
+              title="Back to list"
+            >
+              <ArrowLeft size={16} />
+            </button>
+          )}
           {isEditingName ? (
             <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-050)', width: '100%', maxWidth: '300px' }}>
               <input
@@ -336,7 +362,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
               gap: 'var(--space-050)',
               alignItems: isMe ? 'flex-end' : 'flex-start'
             }}>
-              <div className="pdf-text-copy-13-mono pdf-text-muted">{msg.sender}</div>
+              <div className="pdf-text-copy-13-mono pdf-text-muted">
+                {room.getMember(msg.sender)?.name || msg.sender}
+              </div>
               <div 
                 className="pdf-panel pdf-selectable" 
                 style={{
@@ -353,12 +381,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
                 {msg.msgtype === 'm.image' && msg.url ? (
                   <div>
                     <img 
-                      src={client?.mxcUrlToHttp(msg.url) || ''} 
+                      src={client ? mxcToHttp(msg.url, client.baseUrl) : ''} 
                       alt={msg.body} 
                       className="pdf-radius-sm"
                       style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: 'pointer' }}
                       onClick={() => {
-                        const httpUrl = client?.mxcUrlToHttp(msg.url || '') || '';
+                        const httpUrl = client ? mxcToHttp(msg.url || '', client.baseUrl) : '';
                         if (httpUrl) window.open(httpUrl, '_blank');
                       }}
                     />

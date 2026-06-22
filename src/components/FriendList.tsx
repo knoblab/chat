@@ -106,53 +106,30 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
 
     try {
       const query = searchQuery.trim();
-
       const myUserId = client.getUserId();
 
-      // Case 1: Input looks like a complete User ID (@username:server)
-      if (query.startsWith('@') && query.includes(':')) {
-        if (query === myUserId) {
-          setSearchError('You cannot add yourself as a friend.');
-        } else {
-          setSearchResults([{ userId: query }]);
-        }
-      } else {
-        // Case 2: Search user directory by nickname
-        const res = await client.searchUserDirectory({ term: query, limit: 10 });
-        let results = res.results.map(r => ({
-          userId: r.user_id,
-          displayName: r.display_name,
-          avatarUrl: r.avatar_url
-        }));
+      // Enforce exact Matrix User ID format
+      if (!query.startsWith('@') || !query.includes(':')) {
+        setSearchError('Please enter a complete Matrix User ID (e.g. @username:server).');
+        return;
+      }
 
-        // Fallback: If no users found in directory, try looking up local user directly
-        if (results.length === 0 && myUserId) {
-          const domain = myUserId.split(':')[1];
-          const localUserId = `@${query.toLowerCase()}:${domain}`;
-          
-          if (localUserId !== myUserId) {
-            try {
-              const profile = await client.getProfileInfo(localUserId);
-              results = [{
-                userId: localUserId,
-                displayName: profile.displayname || query,
-                avatarUrl: profile.avatar_url
-              }];
-            } catch (profileErr) {
-              console.log('Local profile lookup failed:', profileErr);
-            }
-          }
-        }
+      if (query === myUserId) {
+        setSearchError('You cannot add yourself as a friend.');
+        return;
+      }
 
-        // Filter out ourselves from directory results
-        if (myUserId) {
-          results = results.filter(r => r.userId !== myUserId);
-        }
-
-        setSearchResults(results);
-        if (results.length === 0) {
-          setSearchError('No users found.');
-        }
+      // Lookup the profile of the exact Matrix ID to confirm existence
+      try {
+        const profile = await client.getProfileInfo(query);
+        setSearchResults([{
+          userId: query,
+          displayName: profile.displayname || undefined,
+          avatarUrl: profile.avatar_url || undefined
+        }]);
+      } catch (err: any) {
+        console.log('Profile lookup failed for exact User ID:', err);
+        setSearchError('User ID not found. Ensure the spelling is exact.');
       }
     } catch (err: any) {
       console.error('Search error:', err);
@@ -251,7 +228,7 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
           <input
             type="text"
             className="pdf-input pdf-input-sm pdf-font-mono"
-            placeholder="Nickname or Matrix ID..."
+            placeholder="Exact Matrix ID (@user:server)..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{ paddingLeft: '32px' }}

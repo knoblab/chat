@@ -89,6 +89,19 @@ export const Auth: React.FC = () => {
         }
       }
 
+      // Sync Google display name if available
+      if (authResult.access_token) {
+        tempClient.setAccessToken(authResult.access_token);
+        if (user.displayName) {
+          try {
+            await tempClient.setDisplayName(user.displayName);
+            console.log("Successfully synchronized Google displayName to Matrix profile:", user.displayName);
+          } catch (nameErr) {
+            console.warn("Failed to synchronize displayName to Matrix profile:", nameErr);
+          }
+        }
+      }
+
       // 4. Set Matrix session
       await login(authResult.access_token!, authResult.user_id!, authResult.device_id!);
     } catch (err: any) {
