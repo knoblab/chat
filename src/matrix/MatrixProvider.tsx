@@ -1,0 +1,70 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { MatrixClient } from 'matrix-js-sdk';
+import { initMatrixClient, getMatrixClient } from './client';
+
+interface MatrixContextType {
+  client: MatrixClient | null;
+  isReady: boolean;
+  login: (accessToken: string, userId: string, deviceId: string) => Promise<void>;
+  logout: () => void;
+}
+
+const MatrixContext = createContext<MatrixContextType | null>(null);
+
+export const MatrixProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [client, setClient] = useState<MatrixClient | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Try to auto-login if tokens exist
+    const token = localStorage.getItem('matrix_access_token');
+    const userId = localStorage.getItem('matrix_user_id');
+    const deviceId = localStorage.getItem('matrix_device_id');
+
+    if (token && userId && deviceId) {
+      initMatrixClient(token, userId, deviceId).then((c) => {
+        setClient(c);
+        setIsReady(true);
+      }).catch(err => {
+        console.error("Failed to restore session", err);
+        setIsReady(true); // ready but not logged in
+      });
+    } else {
+      setIsReady(true);
+    }
+  }, []);
+
+  const login = async (accessToken: string, userId: string, deviceId: string) => {
+    localStorage.setItem('matrix_access_token', accessToken);
+    localStorage.setItem('matrix_user_id', userId);
+    localStorage.setItem('matrix_device_id', deviceId);
+    
+    setIsReady(false);
+    const newClient = await initMatrixClient(accessToken, userId, deviceId);
+    setClient(newClient);
+    setIsReady(true);
+  };
+
+  const logout = () => {
+    const c = getMatrixClient();
+    if (c) c.stopClient();
+    localStorage.removeItem('matrix_access_token');
+    localStorage.removeItem('matrix_user_id');
+    localStorage.removeItem('matrix_device_id');
+    setClient(null);
+  };
+
+  return (
+    <MatrixContext.Provider value={{ client, isReady, login, logout }}>
+      {children}
+    </MatrixContext.Provider>
+  );
+};
+
+export const useMatrix = () => {
+  const context = useContext(MatrixContext);
+  if (!context) {
+    throw new Error('useMatrix must be used within a MatrixProvider');
+  }
+  return context;
+};
