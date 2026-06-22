@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { MatrixEvent, Room, MsgType } from 'matrix-js-sdk';
+import { MatrixEvent, Room, MsgType, Preset } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { AuthImage, isRoomDirect } from './AuthImage';
 import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search, ArrowLeft, Trash2, Edit2 } from 'lucide-react';
@@ -55,6 +55,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
 
   // Image Upload State
   const [uploading, setUploading] = useState(false);
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, msgId: string, isImage: boolean, body: string } | null>(null);
+
+  useEffect(() => {
+    const closeMenu = () => setContextMenu(null);
+    document.addEventListener('click', closeMenu);
+    return () => document.removeEventListener('click', closeMenu);
+  }, []);
+
+  // Typing indicator state
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
   // Invite state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -159,10 +171,21 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     client.on('Room.redaction' as any, handleRedaction);
     client.on('Event.decrypted' as any, handleDecrypted);
 
+    // Typing events
+    const handleTyping = (_event: MatrixEvent, member: any) => {
+      if (!r) return;
+      if (member.roomId === roomId) {
+        const typingMembers = r.getMembers().filter(m => m.typing && m.userId !== client.getUserId());
+        setTypingUsers(typingMembers.map(m => m.name || m.userId));
+      }
+    };
+    client.on('RoomMember.typing' as any, handleTyping);
+
     return () => {
       client.removeListener('Room.timeline' as any, handleTimelineEvent);
       client.removeListener('Room.redaction' as any, handleRedaction);
       client.removeListener('Event.decrypted' as any, handleDecrypted);
+      client.removeListener('RoomMember.typing' as any, handleTyping);
     };
   }, [client, roomId]);
 
@@ -172,6 +195,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
 
     const text = inputText;
     setInputText('');
+    client.sendTyping(roomId, false, 3000);
 
     try {
       await client.sendTextMessage(roomId, text);
@@ -183,12 +207,27 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
 
   const handleDeleteMessage = async (eventId: string) => {
     if (!client) return;
-    if (!confirm('Are you sure you want to delete this message?')) return;
     try {
       await client.redactEvent(roomId, eventId);
     } catch (err: any) {
       console.error('Failed to delete message:', err);
       alert(err.message || 'Failed to delete message');
+    }
+  };
+
+  const handleProfileClick = async (userId: string) => {
+    if (!client || userId === client.getUserId()) return;
+    if (!confirm(`Send friend request to ${userId}?`)) return;
+    try {
+      await client.createRoom({
+        is_direct: true,
+        invite: [userId],
+        preset: Preset.TrustedPrivateChat
+      });
+      alert(`Sent friend request / DM invite to ${userId}`);
+    } catch (err: any) {
+      console.error("Failed to add friend:", err);
+      alert("Failed to add friend: " + err.message);
     }
   };
 
@@ -456,29 +495,70 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
 
       {/* Messages */}
       <div className="pdf-flex-col pdf-gap-150" style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-300)' }}>
-        {messages.map(msg => {
+        {messages.map((msg, idx) => {
           const isMe = msg.sender === client?.getUserId();
+          const prevMsg = idx > 0 ? messages[idx - 1] : null;
+          const showProfile = !isMe && (!prevMsg || prevMsg.sender !== msg.sender || msg.timestamp - prevMsg.timestamp > 300000); // 5 min gap
+
           return (
-            <div key={msg.id} style={{
+            <div key={msg.id} className="animate-message" style={{
               alignSelf: isMe ? 'flex-end' : 'flex-start',
               maxWidth: '70%',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-050)',
-              alignItems: isMe ? 'flex-end' : 'flex-start'
+              alignItems: isMe ? 'flex-end' : 'flex-start',
+              marginTop: showProfile ? 'var(--space-100)' : 0
             }}>
-              <div className="pdf-text-copy-13-mono pdf-text-muted">
-                {room.getMember(msg.sender)?.name || msg.sender}
-              </div>
+              {showProfile && (
+                <div 
+                  className="pdf-flex-row pdf-items-center" 
+                  style={{ gap: 'var(--space-100)', cursor: 'pointer' }}
+                  onClick={() => handleProfileClick(msg.sender)}
+                  title={`Click to add ${msg.sender} as friend`}
+                >
+                  <div style={{
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-default)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px',
+                    fontWeight: 'bold', color: 'var(--color-functional-red)', overflow: 'hidden'
+                  }}>
+                    {room.getMember(msg.sender)?.events?.member?.getContent()?.avatar_url ? (
+                      <AuthImage 
+                        mxcUrl={room.getMember(msg.sender)!.events!.member!.getContent().avatar_url as string} 
+                        alt={msg.sender}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      (room.getMember(msg.sender)?.name || msg.sender).charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ fontWeight: 600 }}>
+                    {room.getMember(msg.sender)?.name || msg.sender}
+                  </div>
+                </div>
+              )}
               <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '100%' }}>
                 <div 
                   className="pdf-panel pdf-selectable" 
+                  onContextMenu={(e) => {
+                    if (!isMe) return; // Only allow editing/deleting own messages
+                    e.preventDefault();
+                    setContextMenu({
+                      x: e.pageX, y: e.pageY,
+                      msgId: msg.id,
+                      isImage: msg.msgtype === 'm.image',
+                      body: msg.body
+                    });
+                  }}
                   style={{
                     background: isMe ? 'var(--color-functional-red)' : 'var(--color-bg-secondary)',
                     color: isMe ? 'var(--color-bg-primary)' : 'var(--color-text-primary)',
                     borderColor: isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)',
                     padding: msg.msgtype === 'm.image' ? 'var(--space-050)' : 'var(--space-100) var(--space-150)',
-                    borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                    borderRadius: isMe 
+                      ? (showProfile ? '12px 12px 2px 12px' : '12px 2px 2px 12px') 
+                      : (showProfile ? '12px 12px 12px 2px' : '2px 12px 12px 2px'),
                     boxShadow: isMe ? 'none' : 'var(--shadow-hardware-bevel)',
                     marginBottom: 0,
                     maxWidth: '100%',
@@ -518,41 +598,47 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
                     </span>
                   )}
                 </div>
-                {isMe && msg.msgtype !== 'm.image' && (
-                  <div className="pdf-flex-row pdf-gap-050" style={{ opacity: 0.7, flexShrink: 0 }}>
-                    <button 
-                      onClick={() => handleStartEdit(msg.id, msg.body)} 
-                      style={{ color: 'var(--color-text-secondary)', cursor: 'pointer' }}
-                      title="Edit Message"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteMessage(msg.id)} 
-                      style={{ color: 'var(--color-functional-red)', cursor: 'pointer' }}
-                      title="Delete Message"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                )}
-                {isMe && msg.msgtype === 'm.image' && (
-                  <div className="pdf-flex-row pdf-gap-050" style={{ opacity: 0.7, flexShrink: 0 }}>
-                    <button 
-                      onClick={() => handleDeleteMessage(msg.id)} 
-                      style={{ color: 'var(--color-functional-red)', cursor: 'pointer' }}
-                      title="Delete Image"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           );
         })}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Context Menu Overlay */}
+      {contextMenu && (
+        <div style={{
+          position: 'fixed',
+          top: contextMenu.y,
+          left: contextMenu.x,
+          background: 'var(--color-bg-primary)',
+          border: '1px solid var(--color-border-default)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          borderRadius: '8px',
+          zIndex: 1000,
+          padding: 'var(--space-050)',
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: '120px'
+        }}>
+          {!contextMenu.isImage && (
+            <button
+              onClick={() => handleStartEdit(contextMenu.msgId, contextMenu.body)}
+              className="pdf-nav-item"
+              style={{ justifyContent: 'flex-start', padding: 'var(--space-100)', borderRadius: '4px', border: 'none', background: 'transparent' }}
+            >
+              <Edit2 size={14} style={{ marginRight: '8px', color: 'var(--color-text-secondary)' }} /> Edit
+            </button>
+          )}
+          <button
+            onClick={() => handleDeleteMessage(contextMenu.msgId)}
+            className="pdf-nav-item"
+            style={{ justifyContent: 'flex-start', padding: 'var(--space-100)', borderRadius: '4px', border: 'none', background: 'transparent', color: 'var(--color-functional-red)' }}
+          >
+            <Trash2 size={14} style={{ marginRight: '8px' }} /> Delete
+          </button>
+        </div>
+      )}
 
       {/* Editing Banner */}
       {editingMessageId && (
@@ -567,6 +653,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
           >
             <X size={14} style={{ color: 'var(--color-functional-red)' }} /> Cancel
           </button>
+        </div>
+      )}
+
+      {/* Typing Indicator */}
+      {typingUsers.length > 0 && (
+        <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ padding: '0 var(--space-300) var(--space-100) var(--space-300)', fontStyle: 'italic', fontSize: '11px' }}>
+          {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
         </div>
       )}
 
@@ -593,7 +686,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
           <input
             type="text"
             value={editingMessageId ? editingText : inputText}
-            onChange={e => editingMessageId ? setEditingText(e.target.value) : setInputText(e.target.value)}
+            onChange={e => {
+              if (editingMessageId) {
+                setEditingText(e.target.value);
+              } else {
+                setInputText(e.target.value);
+                client?.sendTyping(roomId, true, 3000);
+              }
+            }}
             placeholder={editingMessageId ? "Edit your message..." : (uploading ? "Uploading image..." : "Type an encrypted message...")}
             className="pdf-input pdf-input-md pdf-font-mono"
             style={{ maxWidth: 'none' }}

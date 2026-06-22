@@ -71,6 +71,9 @@ export const Dashboard: React.FC = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
+  // Toast notification state
+  const [toastNotification, setToastNotification] = useState<{ sender: string, body: string, roomId: string } | null>(null);
+
   // Request notification permission on mount
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -199,11 +202,26 @@ export const Dashboard: React.FC = () => {
       const isWindowUnfocused = !document.hasFocus();
       const isDifferentRoom = selectedRoomId !== event.getRoomId();
 
-      if (isWindowUnfocused || isDifferentRoom) {
-        // 1. Play synth notification audio
+      if (isDifferentRoom || isWindowUnfocused) {
         playAlertSound();
 
-        // 2. Flash Document Title
+        // Show toast notification
+        let senderName = senderId;
+        try {
+          const m = room.getMember(senderId);
+          if (m && m.name) senderName = m.name;
+        } catch(e) {}
+        
+        setToastNotification({
+          sender: senderName,
+          body: event.getContent().body || 'Sent an image or file',
+          roomId: event.getRoomId()
+        });
+
+        // Auto hide toast
+        setTimeout(() => setToastNotification(null), 5000);
+
+        // Flash Document Title
         if (!titleInterval) {
           let flash = false;
           const roomName = room ? room.name : "New Message";
@@ -728,6 +746,42 @@ export const Dashboard: React.FC = () => {
                 Save Nickname
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastNotification && (
+        <div 
+          className="pdf-animate-fade-in pdf-panel pdf-shadow-glow"
+          style={{
+            position: 'fixed',
+            top: 'var(--space-200)',
+            right: 'var(--space-200)',
+            zIndex: 9999,
+            width: '300px',
+            cursor: 'pointer',
+            background: 'var(--color-bg-primary)',
+            borderLeft: '4px solid var(--color-functional-red)'
+          }}
+          onClick={() => {
+            setSelectedRoomId(toastNotification.roomId);
+            setToastNotification(null);
+          }}
+        >
+          <div className="pdf-flex-row pdf-items-center pdf-justify-between pdf-mb-050">
+            <span className="pdf-text-label-16" style={{ fontSize: '13px', fontWeight: 600 }}>{toastNotification.sender}</span>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setToastNotification(null); }}
+              style={{ padding: 0, color: 'var(--color-text-secondary)', background: 'transparent' }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ 
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '12px' 
+          }}>
+            {toastNotification.body}
           </div>
         </div>
       )}

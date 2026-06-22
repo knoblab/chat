@@ -161,15 +161,17 @@ export const RoomList: React.FC<RoomListProps> = ({ onSelectRoom, selectedRoomId
                   )}
                 </div>
               </div>
-              {/* Leave button */}
-              <button 
-                onClick={(e) => handleLeaveRoom(e, info.room.roomId)}
-                className="pdf-secondary-btn pdf-btn-xs"
-                style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', flexShrink: 0, opacity: 0.5, border: 'none', background: 'transparent' }}
-                title="Leave & Delete"
-              >
-                <LogOut size={12} style={{ color: 'var(--color-functional-red)' }} />
-              </button>
+              {/* Leave button (hidden for General Chat) */}
+              {info.displayName !== 'General Chat' && (
+                <button 
+                  onClick={(e) => handleLeaveRoom(e, info.room.roomId)}
+                  className="pdf-secondary-btn pdf-btn-xs"
+                  style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', flexShrink: 0, opacity: 0.5, border: 'none', background: 'transparent' }}
+                  title="Leave & Delete"
+                >
+                  <LogOut size={12} style={{ color: 'var(--color-functional-red)' }} />
+                </button>
+              )}
             </div>
           </div>
         ))
