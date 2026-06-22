@@ -24,13 +24,17 @@ interface SearchResult {
   avatarUrl?: string;
 }
 
-export const mxcToHttp = (mxcUrl: string, baseUrl: string): string => {
+export const mxcToHttp = (mxcUrl: string, baseUrl: string, accessToken?: string): string => {
   if (!mxcUrl || !mxcUrl.startsWith('mxc://')) return '';
   const parts = mxcUrl.substring(6).split('/');
   if (parts.length < 2) return '';
   const serverName = parts[0];
   const mediaId = parts.slice(1).join('/');
-  return `${baseUrl}/_matrix/media/v3/download/${encodeURIComponent(serverName)}/${encodeURIComponent(mediaId)}`;
+  let url = `${baseUrl}/_matrix/media/v3/download/${encodeURIComponent(serverName)}/${encodeURIComponent(mediaId)}`;
+  if (accessToken) {
+    url += `?access_token=${encodeURIComponent(accessToken)}`;
+  }
+  return url;
 };
 
 export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
@@ -381,12 +385,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
                 {msg.msgtype === 'm.image' && msg.url ? (
                   <div>
                     <img 
-                      src={client ? mxcToHttp(msg.url, client.baseUrl) : ''} 
+                      src={client ? mxcToHttp(msg.url, client.baseUrl, client.getAccessToken() || undefined) : ''} 
                       alt={msg.body} 
                       className="pdf-radius-sm"
                       style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: 'pointer' }}
                       onClick={() => {
-                        const httpUrl = client ? mxcToHttp(msg.url || '', client.baseUrl) : '';
+                        const httpUrl = client ? mxcToHttp(msg.url || '', client.baseUrl, client.getAccessToken() || undefined) : '';
                         if (httpUrl) window.open(httpUrl, '_blank');
                       }}
                     />

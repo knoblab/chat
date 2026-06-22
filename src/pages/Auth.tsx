@@ -5,6 +5,27 @@ import { HOMESERVER_URL } from '../matrix/client';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 
+const generate5CharId = (uid: string): string => {
+  let hash = 5381;
+  for (let i = 0; i < uid.length; i++) {
+    hash = (hash * 33) ^ uid.charCodeAt(i);
+  }
+  hash = Math.abs(hash);
+
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  const alphaNumerics = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+  const firstChar = letters[hash % 26];
+  let rest = '';
+  let temp = Math.floor(hash / 26);
+  for (let i = 0; i < 4; i++) {
+    rest += alphaNumerics[temp % 36];
+    temp = Math.floor(temp / 36);
+  }
+
+  return firstChar + rest;
+};
+
 export const Auth: React.FC = () => {
   const { login } = useMatrix();
   const [error, setError] = useState('');
@@ -66,8 +87,8 @@ export const Auth: React.FC = () => {
       
       if (!user) throw new Error('Failed to get user profile from Google');
 
-      // 2. Map Firebase UID to Matrix Username (must be lowercase)
-      const matrixUsername = `f_${user.uid.toLowerCase()}`;
+      // 2. Map Firebase UID to Matrix Username (must be lowercase, 5-characters)
+      const matrixUsername = generate5CharId(user.uid);
       
       // Determine secure password for Matrix based on Firebase UID
       const matrixPassword = `${user.uid}_qpi_secure_salt_2026`;

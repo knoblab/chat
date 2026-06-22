@@ -6,13 +6,17 @@ import { FriendList } from '../components/FriendList';
 import { ChatRoom } from '../components/ChatRoom';
 import { LogOut, Plus, MessageSquare, Users, Sun, Moon, Settings, X, Upload } from 'lucide-react';
 
-export const mxcToHttp = (mxcUrl: string, baseUrl: string): string => {
+export const mxcToHttp = (mxcUrl: string, baseUrl: string, accessToken?: string): string => {
   if (!mxcUrl || !mxcUrl.startsWith('mxc://')) return '';
   const parts = mxcUrl.substring(6).split('/');
   if (parts.length < 2) return '';
   const serverName = parts[0];
   const mediaId = parts.slice(1).join('/');
-  return `${baseUrl}/_matrix/media/v3/download/${encodeURIComponent(serverName)}/${encodeURIComponent(mediaId)}`;
+  let url = `${baseUrl}/_matrix/media/v3/download/${encodeURIComponent(serverName)}/${encodeURIComponent(mediaId)}`;
+  if (accessToken) {
+    url += `?access_token=${encodeURIComponent(accessToken)}`;
+  }
+  return url;
 };
 
 export const Dashboard: React.FC = () => {
@@ -419,7 +423,7 @@ export const Dashboard: React.FC = () => {
               }}>
                 {myAvatarUrl && client ? (
                   <img 
-                    src={mxcToHttp(myAvatarUrl, client.baseUrl)} 
+                    src={mxcToHttp(myAvatarUrl, client.baseUrl, client.getAccessToken() || undefined)} 
                     alt="Avatar" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
