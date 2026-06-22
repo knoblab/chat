@@ -28,13 +28,13 @@ export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'chats' | 'friends'>('chats');
   
   // Mobile responsive layout states
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [mobileTab, setMobileTab] = useState<'chats' | 'friends' | 'settings'>('chats');
 
   // Handle mobile resizing
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+      setIsMobile(window.innerWidth < 1024);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);

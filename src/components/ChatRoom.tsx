@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { MatrixEvent, Room, MsgType, Preset } from 'matrix-js-sdk';
+import { MatrixEvent, Room, MsgType } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { AuthImage, isRoomDirect } from './AuthImage';
 import { HOMESERVER_URL } from '../matrix/client';
@@ -20,6 +20,7 @@ interface Message {
   msgtype?: string;
   url?: string;
   isEdited?: boolean;
+  isReadByOther?: boolean;
 }
 
 interface SearchResult {
@@ -41,7 +42,7 @@ export const mxcToHttp = (mxcUrl: string, baseUrl: string, accessToken?: string)
   return url;
 };
 
-export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom }) => {
+export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   const { client } = useMatrix();
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -106,9 +107,25 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
       setNewRoomName(r.name || '');
     }
 
+    const sendReadReceiptForLastMessage = () => {
+      if (!r) return;
+      const timeline = r.getLiveTimeline().getEvents();
+      const lastMsg = [...timeline].reverse().find(event => {
+        const type = event.getType();
+        return (type === 'm.room.message' || type === 'm.room.encrypted') && !event.isRedacted();
+      });
+      if (lastMsg && lastMsg.getSender() !== client.getUserId()) {
+        client.sendReadReceipt(lastMsg).catch(err => {
+          console.warn("Failed to send read receipt:", err);
+        });
+      }
+    };
+
     const updateMessages = () => {
       if (!r) return;
       const timeline = r.getLiveTimeline().getEvents();
+      const otherMember = r.getMembers().find(m => m.userId !== client.getUserId());
+
       const msgs = timeline
         .filter(event => {
           const type = event.getType();
@@ -148,6 +165,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
             url = c.url || '';
           }
 
+          // Check read status safely
+          const isReadByOther = (otherMember && typeof r.hasUserReadEvent === 'function')
+            ? r.hasUserReadEvent(otherMember.userId, event.getId() || '')
+            : false;
+
           return {
             id: event.getId() || Math.random().toString(),
             sender: event.getSender() || 'Unknown',
@@ -156,7 +178,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
             url,
             timestamp: event.getTs(),
             isEncrypted: event.isEncrypted(),
-            isEdited
+            isEdited,
+            isReadByOther
           };
         });
       setMessages(msgs);
@@ -166,12 +189,20 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
     };
 
     updateMessages();
+    sendReadReceiptForLastMessage();
 
     // Timeline events (new messages, edits)
     const handleTimelineEvent = (event: MatrixEvent) => {
       if (event.getRoomId() === roomId) {
         updateMessages();
         
+        // Auto mark as read if it is an incoming message
+        if (event.getSender() !== client.getUserId() && (event.getType() === 'm.room.message' || event.getType() === 'm.room.encrypted')) {
+          client.sendReadReceipt(event).catch(err => {
+            console.warn("Failed to send read receipt for timeline event:", err);
+          });
+        }
+
         if (messagesContainerRef.current) {
           const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
           // If we are significantly scrolled up, show pill instead of auto-scrolling
@@ -203,9 +234,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
       }
     };
 
+    // Read receipt events (re-render when other user reads our messages)
+    const handleReceipt = (_event: MatrixEvent, roomObj: any) => {
+      if (roomObj.roomId === roomId) {
+        updateMessages();
+      }
+    };
+
     client.on('Room.timeline' as any, handleTimelineEvent);
     client.on('Room.redaction' as any, handleRedaction);
     client.on('Event.decrypted' as any, handleDecrypted);
+    client.on('Room.receipt' as any, handleReceipt);
 
     // Typing events
     const handleTyping = (_event: MatrixEvent, member: any) => {
@@ -221,6 +260,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
       client.removeListener('Room.timeline' as any, handleTimelineEvent);
       client.removeListener('Room.redaction' as any, handleRedaction);
       client.removeListener('Event.decrypted' as any, handleDecrypted);
+      client.removeListener('Room.receipt' as any, handleReceipt);
       client.removeListener('RoomMember.typing' as any, handleTyping);
     };
   }, [client, roomId]);
@@ -263,43 +303,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
     }
   };
 
-  const handleProfileClick = async (targetUserId: string) => {
-    if (!client || targetUserId === client.getUserId()) return;
-    
-    // Check if we already have a DM
-    const myId = client.getUserId();
-    const rooms = client.getVisibleRooms();
-    const existing = rooms.find(r => 
-      isRoomDirect(client, r.roomId) && 
-      r.getMembers().some(m => m.userId === targetUserId && m.userId !== myId)
-    );
 
-    if (existing) {
-      if (onSelectRoom) onSelectRoom(existing.roomId);
-      return;
-    }
-
-    try {
-      const res = await client.createRoom({
-        is_direct: true,
-        invite: [targetUserId],
-        preset: Preset.TrustedPrivateChat,
-        initial_state: [
-          {
-            type: 'm.room.encryption',
-            state_key: '',
-            content: { algorithm: 'm.megolm.v1.aes-sha2' },
-          },
-        ]
-      });
-      if (res.room_id && onSelectRoom) {
-        onSelectRoom(res.room_id);
-      }
-    } catch (err: any) {
-      console.error("Failed to add friend:", err);
-      alert("Failed to add friend: " + err.message);
-    }
-  };
 
   const handleStartEdit = (msgId: string, currentText: string) => {
     setEditingMessageId(msgId);
@@ -615,9 +619,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
               {showProfile && (
                 <div 
                   className="pdf-flex-row pdf-items-center" 
-                  style={{ gap: 'var(--space-100)', cursor: 'pointer' }}
-                  onClick={() => handleProfileClick(msg.sender)}
-                  title={`Click to add ${msg.sender} as friend`}
+                  style={{ gap: 'var(--space-100)' }}
                 >
                   <div style={{
                     width: '24px', height: '24px', borderRadius: '50%',
@@ -698,20 +700,31 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
                         padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
                       }}>
                         <span>{msg.body}</span>
-                        {showTime && <span>{formattedTime}</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {isMe && isDirect && !msg.isReadByOther && (
+                            <span style={{ color: '#ffc107', fontWeight: 'bold', fontSize: '10px' }}>1</span>
+                          )}
+                          {showTime && <span>{formattedTime}</span>}
+                        </div>
                       </div>
                     </div>
                   ) : (
                     <div className="pdf-flex-col">
                       <span>{msg.body}</span>
-                      {(showTime || msg.isEdited) && (
+                      {(showTime || msg.isEdited || (isMe && isDirect)) && (
                         <div style={{ 
                           fontSize: '10px', 
                           alignSelf: 'flex-end',
                           marginTop: '4px',
                           opacity: 0.6,
-                          color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'
+                          color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
                         }}>
+                          {isMe && isDirect && !msg.isReadByOther && (
+                            <span style={{ color: '#ffc107', fontWeight: 'bold', fontSize: '10px' }}>1</span>
+                          )}
                           {showTime ? formattedTime : ''} {msg.isEdited && <i>(edited)</i>}
                         </div>
                       )}

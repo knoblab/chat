@@ -138,7 +138,7 @@ button {
   -webkit-user-select: text;
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1024px) {
   .pdf-app {
     flex-direction: row;
     height: 100vh;
@@ -160,7 +160,7 @@ button {
   overflow-y: auto;
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1024px) {
   .pdf-sidebar {
     width: 280px;
     flex-shrink: 0;
@@ -168,7 +168,7 @@ button {
   }
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 1023px) {
   .pdf-sidebar {
     display: none;
     position: fixed;
@@ -200,7 +200,7 @@ button {
   overflow-y: auto;
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1024px) {
   .pdf-main-view {
     padding: 0;
     background-color: var(--bg-sidebar);
@@ -215,7 +215,7 @@ button {
   }
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 1023px) {
   .pdf-main-view {
     width: 100%;
     padding: 0;
@@ -516,7 +516,7 @@ button {
    8. MOBILE OPTIMIZATION & ADDITIONAL COMPONENTS
    ========================================================================== */
 
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   .pdf-app {
     flex-direction: column !important;
     height: 100dvh !important;
@@ -535,7 +535,7 @@ button {
 }
 
 /* Hide the back button only when the sidebar is always visible (desktop ≥1200px) */
-@media (min-width: 1200px) {
+@media (min-width: 1024px) {
   .mobile-back-btn {
     display: none !important;
   }
