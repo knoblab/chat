@@ -1,15 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { Preset } from 'matrix-js-sdk';
 import { RoomList } from '../components/RoomList';
 import { FriendList } from '../components/FriendList';
 import { ChatRoom } from '../components/ChatRoom';
-import { LogOut, Plus, MessageSquare, Users } from 'lucide-react';
+import { LogOut, Plus, MessageSquare, Users, Sun, Moon } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const { client, logout } = useMatrix();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chats' | 'friends'>('chats');
+  
+  // Theme state persisted in localStorage
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved as 'light' | 'dark') || 'dark'; // default to dark
+  });
+
+  // Apply theme to documentElement
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   const handleCreateRoom = async () => {
     if (!client) return;
@@ -40,14 +56,24 @@ export const Dashboard: React.FC = () => {
         {/* Header */}
         <div style={{ padding: 'var(--space-200)', borderBottom: '1px solid var(--color-border-default)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="pdf-text-heading-24 pdf-text-red" style={{ letterSpacing: '-0.02em', fontWeight: 800 }}>QPI Chat</div>
-          <button 
-            onClick={logout} 
-            className="pdf-secondary-btn pdf-btn-xs"
-            style={{ width: '32px', height: '32px', padding: 0, justifyContent: 'center' }}
-            title="Logout"
-          >
-            <LogOut size={14} />
-          </button>
+          <div className="pdf-flex-row pdf-gap-100">
+            <button 
+              onClick={toggleTheme} 
+              className="pdf-secondary-btn pdf-btn-xs"
+              style={{ width: '32px', height: '32px', padding: 0, justifyContent: 'center' }}
+              title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            >
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+            <button 
+              onClick={logout} 
+              className="pdf-secondary-btn pdf-btn-xs"
+              style={{ width: '32px', height: '32px', padding: 0, justifyContent: 'center' }}
+              title="Logout"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
         </div>
 
         {/* Sidebar Tabs */}

@@ -107,17 +107,48 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
     try {
       const query = searchQuery.trim();
 
+      const myUserId = client.getUserId();
+
       // Case 1: Input looks like a complete User ID (@username:server)
       if (query.startsWith('@') && query.includes(':')) {
-        setSearchResults([{ userId: query }]);
+        if (query === myUserId) {
+          setSearchError('You cannot add yourself as a friend.');
+        } else {
+          setSearchResults([{ userId: query }]);
+        }
       } else {
         // Case 2: Search user directory by nickname
         const res = await client.searchUserDirectory({ term: query, limit: 10 });
-        const results = res.results.map(r => ({
+        let results = res.results.map(r => ({
           userId: r.user_id,
           displayName: r.display_name,
           avatarUrl: r.avatar_url
         }));
+
+        // Fallback: If no users found in directory, try looking up local user directly
+        if (results.length === 0 && myUserId) {
+          const domain = myUserId.split(':')[1];
+          const localUserId = `@${query.toLowerCase()}:${domain}`;
+          
+          if (localUserId !== myUserId) {
+            try {
+              const profile = await client.getProfileInfo(localUserId);
+              results = [{
+                userId: localUserId,
+                displayName: profile.displayname || query,
+                avatarUrl: profile.avatar_url
+              }];
+            } catch (profileErr) {
+              console.log('Local profile lookup failed:', profileErr);
+            }
+          }
+        }
+
+        // Filter out ourselves from directory results
+        if (myUserId) {
+          results = results.filter(r => r.userId !== myUserId);
+        }
+
         setSearchResults(results);
         if (results.length === 0) {
           setSearchError('No users found.');
