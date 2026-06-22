@@ -27,6 +27,108 @@ export const Dashboard: React.FC = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Title flash and Audio alert for new messages
+  useEffect(() => {
+    if (!client) return;
+
+    let titleInterval: any = null;
+    const originalTitle = "QPI Chat";
+
+    const playAlertSound = () => {
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        const playTone = (freq: number, start: number, duration: number) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
+          gain.gain.setValueAtTime(0.08, audioCtx.currentTime + start);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + duration);
+          
+          osc.start(audioCtx.currentTime + start);
+          osc.stop(audioCtx.currentTime + start + duration);
+        };
+
+        playTone(523.25, 0, 0.12); // C5
+        playTone(659.25, 0.08, 0.15); // E5
+      } catch (err) {
+        console.warn("Failed to play notification audio:", err);
+      }
+    };
+
+    const handleNewMessage = (event: any, room: any, toStartOfTimeline: boolean) => {
+      if (toStartOfTimeline) return;
+      if (event.getType() !== 'm.room.message') return;
+
+      const senderId = event.getSender();
+      if (senderId === client.getUserId()) return; // ignore our own messages
+
+      const isWindowUnfocused = !document.hasFocus();
+      const isDifferentRoom = selectedRoomId !== event.getRoomId();
+
+      if (isWindowUnfocused || isDifferentRoom) {
+        // 1. Play synth notification audio
+        playAlertSound();
+
+        // 2. Flash Document Title
+        if (!titleInterval) {
+          let flash = false;
+          const roomName = room ? room.name : "New Message";
+          titleInterval = setInterval(() => {
+            document.title = flash ? `💬 New Msg: ${roomName}` : originalTitle;
+            flash = !flash;
+          }, 1000);
+        }
+
+        // 3. Web Push Notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          const content = event.getContent();
+          const bodyText = content.msgtype === 'm.image' ? 'Sent an image' : (content.body || '');
+          const senderName = room ? (room.getMember(senderId)?.name || senderId) : senderId;
+          
+          new Notification(senderName, {
+            body: bodyText,
+            tag: event.getRoomId(),
+            renotify: true
+          } as any);
+        }
+      }
+    };
+
+    client.on('Room.timeline' as any, handleNewMessage);
+
+    const handleWindowFocus = () => {
+      if (titleInterval) {
+        clearInterval(titleInterval);
+        titleInterval = null;
+      }
+      document.title = originalTitle;
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      client.removeListener('Room.timeline' as any, handleNewMessage);
+      window.removeEventListener('focus', handleWindowFocus);
+      if (titleInterval) {
+        clearInterval(titleInterval);
+      }
+      document.title = originalTitle;
+    };
+  }, [client, selectedRoomId]);
+
   const handleCreateRoom = async () => {
     if (!client) return;
     try {

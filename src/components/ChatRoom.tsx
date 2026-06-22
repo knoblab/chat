@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MatrixEvent, Room, MsgType } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
-import { Send, Lock, Image as ImageIcon, Edit3, Check, X } from 'lucide-react';
+import { Send, Lock, Image as ImageIcon, Edit3, Check, X, UserPlus, Search } from 'lucide-react';
 
 interface ChatRoomProps {
   roomId: string;
@@ -17,6 +17,12 @@ interface Message {
   url?: string;
 }
 
+interface SearchResult {
+  userId: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
 export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   const { client } = useMatrix();
   const [room, setRoom] = useState<Room | null>(null);
@@ -29,6 +35,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
 
   // Image Upload State
   const [uploading, setUploading] = useState(false);
+
+  // Invite state
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteQuery, setInviteQuery] = useState('');
+  const [inviteResults, setInviteResults] = useState<SearchResult[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,12 +130,26 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
 
     setUploading(true);
     try {
-      // 1. Upload media content to server
-      const res = await client.uploadContent(file, {
-        type: file.type,
-        name: file.name
-      });
+      const token = client.getAccessToken();
+      if (!token) throw new Error("No access token found");
+
+      const uploadUrl = `${client.baseUrl}/_matrix/media/v3/upload?filename=${encodeURIComponent(file.name)}`;
       
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': file.type,
+        },
+        body: file
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+      }
+
+      const res = await response.json();
       const mxcUri = res.content_uri;
 
       // 2. Send E2EE-capable m.image message
@@ -143,9 +171,92 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
     }
   };
 
+  const handleInviteSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteQuery.trim() || !client) return;
+
+    setInviteLoading(true);
+    setInviteError('');
+    setInviteResults([]);
+    setInviteSuccess('');
+
+    try {
+      const query = inviteQuery.trim();
+      const myUserId = client.getUserId();
+
+      if (query.startsWith('@') && query.includes(':')) {
+        if (query === myUserId) {
+          setInviteError('You cannot invite yourself.');
+        } else {
+          setInviteResults([{ userId: query }]);
+        }
+      } else {
+        const res = await client.searchUserDirectory({ term: query, limit: 10 });
+        let results = res.results.map(r => ({
+          userId: r.user_id,
+          displayName: r.display_name,
+          avatarUrl: r.avatar_url
+        }));
+
+        if (results.length === 0 && myUserId) {
+          const domain = myUserId.split(':')[1];
+          const localUserId = `@${query.toLowerCase()}:${domain}`;
+          
+          if (localUserId !== myUserId) {
+            try {
+              const profile = await client.getProfileInfo(localUserId);
+              results = [{
+                userId: localUserId,
+                displayName: profile.displayname || query,
+                avatarUrl: profile.avatar_url
+              }];
+            } catch (profileErr) {
+              console.log('Local profile lookup failed for invite:', profileErr);
+            }
+          }
+        }
+
+        if (myUserId) {
+          results = results.filter(r => r.userId !== myUserId);
+        }
+
+        setInviteResults(results);
+        if (results.length === 0) {
+          setInviteError('No users found.');
+        }
+      }
+    } catch (err: any) {
+      console.error('Invite search error:', err);
+      setInviteError(err.message || 'Search failed. Please try again.');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleInviteUser = async (targetUserId: string) => {
+    if (!client) return;
+    setInviteError('');
+    setInviteSuccess('');
+    try {
+      await client.invite(roomId, targetUserId);
+      setInviteSuccess(`Successfully invited ${targetUserId}!`);
+      setTimeout(() => {
+        setIsInviteModalOpen(false);
+        setInviteQuery('');
+        setInviteResults([]);
+        setInviteSuccess('');
+      }, 1500);
+    } catch (err: any) {
+      console.error('Invite user error:', err);
+      setInviteError(err.message || 'Failed to invite user');
+    }
+  };
+
   if (!room) {
     return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading room...</div>;
   }
+
+  const isDirect = room.currentState.getStateEvents('m.room.create', '')?.getContent().is_direct || false;
 
   return (
     <div className="pdf-flex-col pdf-h-full" style={{ flex: 1 }}>
@@ -194,11 +305,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
           )}
         </div>
         
-        {client?.isRoomEncrypted(roomId) && (
-          <div className="pdf-badge pdf-text-label-14-mono" style={{ borderColor: '#10b981', color: '#10b981', padding: 'var(--space-050) var(--space-100)', display: 'flex', alignItems: 'center', gap: 'var(--space-050)' }}>
-            <Lock size={12} /> E2EE SECURE
-          </div>
-        )}
+        <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)' }}>
+          {!isDirect && (
+            <button
+              onClick={() => setIsInviteModalOpen(true)}
+              className="pdf-btn-primary pdf-btn-xs"
+              style={{ background: 'var(--color-functional-red)', color: 'var(--color-bg-primary)', display: 'flex', alignItems: 'center', gap: 'var(--space-050)', height: '28px', padding: '0 var(--space-100)' }}
+            >
+              <UserPlus size={12} /> Invite
+            </button>
+          )}
+          {client?.isRoomEncrypted(roomId) && (
+            <div className="pdf-badge pdf-text-label-14-mono" style={{ borderColor: '#10b981', color: '#10b981', padding: 'var(--space-050) var(--space-100)', display: 'flex', alignItems: 'center', gap: 'var(--space-050)', height: '28px' }}>
+              <Lock size={12} /> E2EE SECURE
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
@@ -292,6 +414,104 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
           </button>
         </form>
       </div>
+
+      {/* Invite Modal */}
+      {isInviteModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: 'var(--space-200)'
+        }}>
+          <div className="pdf-panel pdf-shadow-glow" style={{
+            width: '100%',
+            maxWidth: '450px',
+            padding: 'var(--space-300)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-200)',
+            position: 'relative',
+            background: 'var(--color-bg-primary)',
+            border: '1px solid var(--color-border-default)'
+          }}>
+            {/* Modal Header */}
+            <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ borderBottom: '1px solid var(--color-border-default)', paddingBottom: 'var(--space-100)' }}>
+              <h3 className="pdf-text-heading-24 pdf-text-red" style={{ margin: 0, fontSize: '1.2rem' }}>Invite User</h3>
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsInviteModalOpen(false);
+                  setInviteQuery('');
+                  setInviteResults([]);
+                  setInviteError('');
+                  setInviteSuccess('');
+                }}
+                className="pdf-secondary-btn"
+                style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Invite Form */}
+            <form onSubmit={handleInviteSearch} className="pdf-flex-row pdf-gap-100">
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-secondary)' }} />
+                <input
+                  type="text"
+                  className="pdf-input pdf-input-sm pdf-font-mono"
+                  placeholder="Nickname or Matrix ID..."
+                  value={inviteQuery}
+                  onChange={e => setInviteQuery(e.target.value)}
+                  style={{ paddingLeft: '32px' }}
+                />
+              </div>
+              <button type="submit" disabled={inviteLoading} className="pdf-btn-primary pdf-btn-sm" style={{ flexShrink: 0 }}>
+                {inviteLoading ? '...' : 'Search'}
+              </button>
+            </form>
+
+            {/* Success & Error message */}
+            {inviteSuccess && (
+              <div className="pdf-text-copy-14 pdf-text-center" style={{ color: '#10b981', fontWeight: 600 }}>
+                {inviteSuccess}
+              </div>
+            )}
+            {inviteError && (
+              <div className="pdf-text-copy-14 pdf-text-center" style={{ color: 'var(--color-functional-red)' }}>
+                {inviteError}
+              </div>
+            )}
+
+            {/* Search Results */}
+            {inviteResults.length > 0 && (
+              <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--color-border-default)', borderRadius: '6px' }}>
+                {inviteResults.map(result => (
+                  <div key={result.userId} className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ padding: 'var(--space-100)', borderBottom: '1px solid var(--color-border-default)' }}>
+                    <div style={{ overflow: 'hidden', marginRight: 'var(--space-100)', flex: 1 }}>
+                      <div className="pdf-text-label-16" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>{result.displayName || result.userId.split(':')[0].substring(1)}</div>
+                      <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginTop: '2px' }}>{result.userId}</div>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => handleInviteUser(result.userId)}
+                      className="pdf-btn-primary pdf-btn-xs"
+                      style={{ flexShrink: 0 }}
+                    >
+                      Invite
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
