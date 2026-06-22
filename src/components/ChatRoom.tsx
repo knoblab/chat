@@ -229,9 +229,21 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
     client.sendTyping(roomId, false, 3000);
 
     try {
+      // Proactively ensure keys are downloaded for all members before encrypting
+      if (client.isRoomEncrypted(roomId)) {
+        const crypto = client.getCrypto();
+        const userIds = room?.getMembers().map(m => m.userId) || [];
+        if (crypto && userIds.length > 0) {
+          await crypto.getUserDeviceInfo(userIds, true);
+        } else if ((client as any).downloadKeys && userIds.length > 0) {
+          await (client as any).downloadKeys(userIds);
+        }
+      }
+      
       await client.sendTextMessage(roomId, text);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send message:', err);
+      alert('Failed to send message: ' + (err.message || 'Unknown error'));
       setInputText(text); // restore on fail
     }
   };
@@ -462,7 +474,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
 
   // Initial load auto-scroll
   useEffect(() => {
-    setTimeout(() => scrollToBottom('auto'), 100);
+    scrollToBottom('auto');
+    const t = setTimeout(() => scrollToBottom('auto'), 150);
+    return () => clearTimeout(t);
   }, [roomId, room]);
 
   if (!room) {
@@ -473,6 +487,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
   const myId = client?.getUserId();
   const otherMembers = room?.getMembers().filter(m => m.userId !== myId);
   const isPending = isDirect && otherMembers && otherMembers.length > 0 && otherMembers.every(m => m.membership === 'invite');
+  const amIJoined = myId && room ? room.getMember(myId)?.membership === 'join' : false;
 
   return (
     <div className="pdf-flex-col pdf-h-full" style={{ flex: 1 }}>
@@ -558,14 +573,29 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
       <div 
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="pdf-flex-col pdf-gap-150" 
+        className="pdf-flex-col" 
         style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-300)', position: 'relative' }}
       >
         {messages.map((msg, idx) => {
           const isMe = msg.sender === client?.getUserId();
           const prevMsg = idx > 0 ? messages[idx - 1] : null;
-          const showProfile = !isMe && (!prevMsg || prevMsg.sender !== msg.sender || msg.timestamp - prevMsg.timestamp > 300000); // 5 min gap
-          const formattedTime = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const nextMsg = idx < messages.length - 1 ? messages[idx + 1] : null;
+
+          const prevDate = prevMsg ? new Date(prevMsg.timestamp) : null;
+          const currDate = new Date(msg.timestamp);
+          const nextDate = nextMsg ? new Date(nextMsg.timestamp) : null;
+
+          const isSameSenderAsPrev = prevMsg && prevMsg.sender === msg.sender;
+          const isSameMinuteAsPrev = prevDate && prevDate.getHours() === currDate.getHours() && prevDate.getMinutes() === currDate.getMinutes() && currDate.getDate() === prevDate.getDate();
+          
+          const isSameSenderAsNext = nextMsg && nextMsg.sender === msg.sender;
+          const isSameMinuteAsNext = nextDate && nextDate.getHours() === currDate.getHours() && nextDate.getMinutes() === currDate.getMinutes() && currDate.getDate() === nextDate.getDate();
+
+          const isFirstInGroup = !isSameSenderAsPrev || !isSameMinuteAsPrev;
+          const showProfile = !isMe && isFirstInGroup;
+          const showTime = !isSameSenderAsNext || !isSameMinuteAsNext;
+          const formattedTime = currDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const marginTop = idx === 0 ? 0 : (isFirstInGroup ? 'var(--space-150)' : 'var(--space-025)');
 
           return (
             <div key={msg.id} className="animate-message" style={{
@@ -575,7 +605,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
               flexDirection: 'column',
               gap: 'var(--space-050)',
               alignItems: isMe ? 'flex-end' : 'flex-start',
-              marginTop: showProfile ? 'var(--space-100)' : 0
+              marginTop: marginTop
             }}>
               {showProfile && (
                 <div 
@@ -624,8 +654,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
                     borderColor: isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)',
                     padding: msg.msgtype === 'm.image' ? 'var(--space-050)' : 'var(--space-100) var(--space-150)',
                     borderRadius: isMe 
-                      ? (showProfile ? '12px 12px 2px 12px' : '12px 2px 2px 12px') 
-                      : (showProfile ? '12px 12px 12px 2px' : '2px 12px 12px 2px'),
+                      ? (isFirstInGroup ? '12px 12px 2px 12px' : '12px 2px 2px 12px') 
+                      : (isFirstInGroup ? '12px 12px 12px 2px' : '2px 12px 12px 2px'),
                     boxShadow: isMe ? 'none' : 'var(--shadow-hardware-bevel)',
                     marginBottom: 0,
                     maxWidth: '100%',
@@ -663,21 +693,23 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
                         padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
                       }}>
                         <span>{msg.body}</span>
-                        <span>{formattedTime}</span>
+                        {showTime && <span>{formattedTime}</span>}
                       </div>
                     </div>
                   ) : (
                     <div className="pdf-flex-col">
                       <span>{msg.body}</span>
-                      <div style={{ 
-                        fontSize: '10px', 
-                        alignSelf: 'flex-end',
-                        marginTop: '4px',
-                        opacity: 0.6,
-                        color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'
-                      }}>
-                        {formattedTime} {msg.isEdited && <i>(edited)</i>}
-                      </div>
+                      {(showTime || msg.isEdited) && (
+                        <div style={{ 
+                          fontSize: '10px', 
+                          alignSelf: 'flex-end',
+                          marginTop: '4px',
+                          opacity: 0.6,
+                          color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'
+                        }}>
+                          {showTime ? formattedTime : ''} {msg.isEdited && <i>(edited)</i>}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -796,14 +828,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack, onSelectRoom
                 client?.sendTyping(roomId, true, 3000);
               }
             }}
-            placeholder={isPending ? "Waiting for them to accept..." : (editingMessageId ? "Edit your message..." : "Type your message...")}
+            placeholder={isPending ? "Waiting for them to accept..." : (!amIJoined ? "Please accept the invite first..." : (editingMessageId ? "Edit your message..." : "Type your message..."))}
             style={{ flex: 1 }}
-            disabled={isPending || uploading}
+            disabled={isPending || !amIJoined || uploading}
             autoFocus={!!editingMessageId}
           />
           <button 
             type="submit" 
-            disabled={(editingMessageId ? !editingText.trim() : !inputText.trim()) || uploading || isPending} 
+            disabled={(editingMessageId ? !editingText.trim() : !inputText.trim()) || uploading || isPending || !amIJoined} 
             className="pdf-btn-primary pdf-btn-md"
           >
             {editingMessageId ? 'Save' : <><Send size={16} /> Send</>}
