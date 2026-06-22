@@ -109,15 +109,15 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
       const query = searchQuery.trim();
       const myUserId = client.getUserId() || '';
 
-      // Resolve 5-char code to full Matrix User ID based on current user's homeserver
+      // Resolve 5 or 8-char code to full Matrix User ID based on current user's homeserver
       let targetUserId = query;
       if (!query.startsWith('@') && !query.includes(':')) {
-        if (query.length === 5) {
+        if (query.length >= 5) {
           const colonIndex = myUserId.indexOf(':');
           const suffix = colonIndex !== -1 ? myUserId.substring(colonIndex) : ':qpi.digital';
           targetUserId = `@${query.toLowerCase()}${suffix}`;
         } else {
-          setSearchError('Please enter a valid 5-character User ID code.');
+          setSearchError('Please enter a valid User ID code.');
           return;
         }
       }
@@ -299,7 +299,7 @@ export const FriendList: React.FC<FriendListProps> = ({ onSelectRoom, selectedRo
           <input
             type="text"
             className="pdf-input pdf-input-sm pdf-font-mono"
-            placeholder="Enter 5-character Code..."
+            placeholder="Enter User Code..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{ paddingLeft: '32px' }}
