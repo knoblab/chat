@@ -4,7 +4,7 @@ import { useMatrix } from '../../matrix/MatrixProvider';
 import { AuthImage } from '../AuthImage';
 import { downloadMxcMedia } from '../../utils/media';
 import type { Message } from '../../types';
-import { Download } from 'lucide-react';
+import { Download, Timer } from 'lucide-react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 interface MessageListProps {
@@ -37,8 +37,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           followOutput="auto"
           alignToBottom
           atBottomStateChange={onAtBottomStateChange}
-          style={{ height: '100%', width: '100%' }}
-          className="pdf-p-300"
+          style={{ height: '100%', width: '100%', overflowX: 'hidden' }}
           itemContent={(idx, msg) => {
             const isMe = msg.sender === client?.getUserId();
             const prevMsg = idx > 0 ? messages[idx - 1] : null;
@@ -66,6 +65,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                 flexDirection: 'column',
                 alignItems: isMe ? 'flex-end' : 'flex-start',
                 width: '100%',
+                padding: '0 var(--space-300)',
+                paddingTop: idx === 0 ? 'var(--space-300)' : 0,
+                paddingBottom: idx === messages.length - 1 ? 'var(--space-300)' : 0,
                 marginTop: marginTop
               }}>
                 {showProfile && (
@@ -100,9 +102,13 @@ export const MessageList: React.FC<MessageListProps> = ({
                       onContextMenu(e, msg);
                     }}
                     style={{
-                      background: isMe ? 'var(--color-functional-red)' : 'var(--color-bg-secondary)',
-                      color: isMe ? 'var(--color-bg-primary)' : 'var(--color-text-primary)',
-                      borderColor: isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)',
+                      background: msg.isDisappearing 
+                        ? (isMe ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.15)')
+                        : (isMe ? 'var(--color-functional-red)' : 'var(--color-bg-secondary)'),
+                      color: msg.isDisappearing
+                        ? (isMe ? '#fff' : '#f59e0b')
+                        : (isMe ? 'var(--color-bg-primary)' : 'var(--color-text-primary)'),
+                      border: msg.isDisappearing ? '1px dashed #f59e0b' : '1px solid ' + (isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)'),
                       padding: msg.msgtype === 'm.image' ? 'var(--space-050)' : 'var(--space-100) var(--space-150)',
                       borderRadius: isMe 
                         ? (isFirstInGroup ? '12px 12px 2px 12px' : '12px 2px 2px 12px') 
@@ -146,6 +152,11 @@ export const MessageList: React.FC<MessageListProps> = ({
                         }}>
                           <span>{msg.body}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {msg.isDisappearing && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b', fontSize: '10px', fontWeight: 'bold' }}>
+                                <Timer size={11} /> 1h
+                              </span>
+                            )}
                             {isMe && isDirect && !msg.isReadByOther && (
                               <span style={{ color: '#ffc107', fontWeight: 'bold', fontSize: '10px' }}>1</span>
                             )}
@@ -156,17 +167,22 @@ export const MessageList: React.FC<MessageListProps> = ({
                     ) : (
                       <div className="pdf-flex-col">
                         <span>{msg.body}</span>
-                        {(showTime || msg.isEdited || (isMe && isDirect)) && (
+                        {(showTime || msg.isEdited || (isMe && isDirect) || msg.isDisappearing) && (
                           <div style={{ 
                             fontSize: '10px', 
                             alignSelf: 'flex-end',
                             marginTop: '4px',
-                            opacity: 0.6,
-                            color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)',
+                            opacity: 0.8,
+                            color: msg.isDisappearing ? '#f59e0b' : (isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'),
                             display: 'flex',
                             alignItems: 'center',
                             gap: '6px'
                           }}>
+                            {msg.isDisappearing && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b', fontSize: '10px', fontWeight: 'bold' }}>
+                                <Timer size={11} /> 1h
+                              </span>
+                            )}
                             {msg.isEdited && <span>(edited)</span>}
                             {isMe && isDirect && !msg.isReadByOther && (
                               <span style={{ color: '#ffc107', fontWeight: 'bold' }}>1</span>

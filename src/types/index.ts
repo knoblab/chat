@@ -8,6 +8,8 @@ export interface Message {
   url?: string;
   isEdited?: boolean;
   isReadByOther?: boolean;
+  isDisappearing?: boolean;
+  expiryTs?: number;
 }
 
 export interface UserSearchResult {

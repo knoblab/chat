@@ -19,8 +19,11 @@ interface UIStoreState {
 
 const getInitialTheme = (): ThemeType => {
   const saved = localStorage.getItem('theme');
-  if (saved === 'light' || saved === 'dark') return saved;
-  return 'dark';
+  const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+  return theme;
 };
 
 export const useUIStore = create<UIStoreState>((set, get) => ({

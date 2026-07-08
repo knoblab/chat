@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "npm run build && wrangler dev",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "generate:icons": "node scripts/generate-pngs.mjs"
   },
   "dependencies": {
     "firebase": "^12.15.0",

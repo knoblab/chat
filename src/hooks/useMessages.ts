@@ -41,6 +41,11 @@ export const useMessages = (roomId: string) => {
         const content = event.getContent();
         const relatesTo = content['m.relates_to'];
         if (relatesTo && relatesTo.rel_type === 'm.replace') return false;
+
+        const expiryTs = content.expiry_ts;
+        if (expiryTs && Date.now() > expiryTs) {
+          return false;
+        }
         return true;
       })
       .map(event => {
@@ -49,6 +54,14 @@ export const useMessages = (roomId: string) => {
         let msgtype: string;
         let url: string;
         let isEdited = false;
+        let isDisappearing = false;
+        let expiryTs: number | undefined = undefined;
+
+        const c = event.getContent();
+        if (c.org_qpi_disappearing || c.expiry_ts) {
+          isDisappearing = true;
+          expiryTs = c.expiry_ts;
+        }
 
         if (event.getType() === 'm.room.encrypted') {
           body = '🔒 Unable to decrypt message';
@@ -61,8 +74,11 @@ export const useMessages = (roomId: string) => {
           msgtype = newContent.msgtype || 'm.text';
           url = newContent.url || '';
           isEdited = true;
+          if (newContent.org_qpi_disappearing || newContent.expiry_ts) {
+            isDisappearing = true;
+            expiryTs = newContent.expiry_ts;
+          }
         } else {
-          const c = event.getContent();
           body = c.body || '';
           msgtype = c.msgtype || 'm.text';
           url = c.url || '';
@@ -81,7 +97,9 @@ export const useMessages = (roomId: string) => {
           timestamp: event.getTs(),
           isEncrypted: event.isEncrypted(),
           isEdited,
-          isReadByOther
+          isReadByOther,
+          isDisappearing,
+          expiryTs,
         };
       });
 
@@ -106,6 +124,10 @@ export const useMessages = (roomId: string) => {
       updateMessages();
       sendReadReceiptForLastMessage(currentRoom);
     }
+
+    const expiryInterval = setInterval(() => {
+      updateMessages();
+    }, 15000);
 
     const handleTimelineEvent = (event: MatrixEvent) => {
       if (event.getRoomId() === roomId) {
@@ -136,6 +158,7 @@ export const useMessages = (roomId: string) => {
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      clearInterval(expiryInterval);
       client.removeListener('Room.timeline' as any, handleTimelineEvent);
       client.removeListener('Room.receipt' as any, handleReceiptEvent);
       client.removeListener('Room.redaction' as any, handleRedactionEvent);

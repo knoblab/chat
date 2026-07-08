@@ -6,6 +6,7 @@ interface ChatStoreState {
   messages: Record<string, Message[]>; // roomId -> Message[]
   unreadCounts: Record<string, number>; // roomId -> unread count
   typingUsers: Record<string, string[]>; // roomId -> display names
+  disappearingMode: Record<string, boolean>; // roomId -> is disappearing mode enabled
   
   selectRoom: (roomId: string | null) => void;
   setMessages: (roomId: string, messages: Message[]) => void;
@@ -16,6 +17,7 @@ interface ChatStoreState {
   incrementUnreadCount: (roomId: string) => void;
   clearUnreadCount: (roomId: string) => void;
   setTypingUsers: (roomId: string, users: string[]) => void;
+  toggleDisappearingMode: (roomId: string, enabled?: boolean) => void;
 }
 
 export const useChatStore = create<ChatStoreState>((set) => ({
@@ -23,6 +25,15 @@ export const useChatStore = create<ChatStoreState>((set) => ({
   messages: {},
   unreadCounts: {},
   typingUsers: {},
+  disappearingMode: {},
+
+  toggleDisappearingMode: (roomId, enabled) =>
+    set((state) => ({
+      disappearingMode: {
+        ...state.disappearingMode,
+        [roomId]: enabled !== undefined ? enabled : !state.disappearingMode[roomId],
+      },
+    })),
 
   selectRoom: (roomId) => set({ selectedRoomId: roomId }),
 

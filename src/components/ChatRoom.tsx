@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { MatrixEvent, MsgType } from 'matrix-js-sdk';
 import { useMatrix } from '../matrix/MatrixProvider';
 import { useMessages } from '../hooks/useMessages';
+import { useChatStore } from '../stores/useChatStore';
 import { isRoomDirect } from '../utils/rooms';
 import { ChatHeader } from './chat/ChatHeader';
 import { MessageList } from './chat/MessageList';
@@ -22,6 +23,8 @@ interface ChatRoomProps {
 export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   const { client } = useMatrix();
   const { room, messages, refreshMessages } = useMessages(roomId);
+  const { disappearingMode } = useChatStore();
+  const isDisappearing = disappearingMode[roomId] || false;
 
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -105,6 +108,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
       }
     }
 
+    const extraContent = isDisappearing ? {
+      org_qpi_disappearing: true,
+      expiry_ts: Date.now() + 60 * 60 * 1000,
+    } : {};
+
     if (file) {
       try {
         const optimizedFile = await optimizeImage(file, 1920, 0.85);
@@ -113,12 +121,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
         if (mxcUrl) {
           await client.sendMessage(roomId, {
             msgtype: MsgType.Image,
-            body: optimizedFile.name || 'image',
+            body: text.trim() || optimizedFile.name || 'image',
             url: mxcUrl,
             info: {
               mimetype: optimizedFile.type,
               size: optimizedFile.size,
             },
+            ...extraContent,
           } as any);
         }
       } catch (err: any) {
@@ -127,7 +136,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
       }
     } else if (text.trim()) {
       try {
-        await client.sendTextMessage(roomId, text.trim());
+        await client.sendMessage(roomId, {
+          msgtype: MsgType.Text,
+          body: text.trim(),
+          ...extraContent,
+        } as any);
       } catch (err: any) {
         console.error('Failed to send text message:', err);
         alert('Failed to send message: ' + (err.message || 'Unknown error'));

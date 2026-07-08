@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useMatrix } from '../../matrix/MatrixProvider';
-import { Send, Image as ImageIcon, Edit2, X } from 'lucide-react';
+import { useChatStore } from '../../stores/useChatStore';
+import { Send, Image as ImageIcon, Edit2, X, Timer } from 'lucide-react';
 
 interface MessageInputProps {
   roomId: string;
@@ -22,9 +23,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   typingUsers = [],
 }) => {
   const { client } = useMatrix();
+  const { disappearingMode, toggleDisappearingMode } = useChatStore();
+  const isDisappearing = disappearingMode[roomId] || false;
+
   const [inputText, setInputText] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<File | null>(null);
+  const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -33,7 +41,63 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     } else {
       setInputText('');
     }
-  }, [editingMessageId, initialEditingText]);
+    textInputRef.current?.focus();
+  }, [editingMessageId, initialEditingText, roomId]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+        return;
+      }
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      
+      const ignoreKeys = [
+        'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
+        'PageUp', 'PageDown', 'Home', 'End', 'Shift', 'Control', 'Alt', 
+        'Meta', 'CapsLock', 'NumLock', 'ScrollLock', 'Pause', 'Insert'
+      ];
+      if (ignoreKeys.includes(e.key) || e.key.startsWith('F')) return;
+
+      if (textInputRef.current) {
+        textInputRef.current.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
+    };
+  }, [attachmentPreviewUrl]);
+
+  const handleRemoveAttachment = () => {
+    if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
+    setSelectedAttachment(null);
+    setAttachmentPreviewUrl(null);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 25MB Check
+    if (file.size > 25 * 1024 * 1024) {
+      alert('단일 파일 업로드는 최대 25MB까지만 가능합니다.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setSelectedAttachment(file);
+    const url = URL.createObjectURL(file);
+    setAttachmentPreviewUrl(url);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
@@ -52,10 +116,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() && !fileInputRef.current?.files?.length) return;
+    if (!inputText.trim() && !selectedAttachment) return;
 
     const text = inputText;
+    const fileToSend = selectedAttachment;
+
     setInputText('');
+    handleRemoveAttachment();
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (client) {
       try { client.sendTyping(roomId, false, 0); } catch {}
@@ -64,13 +132,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (editingMessageId) {
       await onSaveEdit(text);
     } else {
-      const file = fileInputRef.current?.files?.[0];
-      if (fileInputRef.current) fileInputRef.current.value = '';
       setUploading(true);
       try {
-        await onSend(text, file);
+        await onSend(text, fileToSend || undefined);
       } finally {
         setUploading(false);
+        textInputRef.current?.focus();
       }
     }
   };
@@ -80,6 +147,34 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       {typingUsers.length > 0 && !editingMessageId && (
         <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ padding: '4px var(--space-200)', fontSize: '11px', fontStyle: 'italic', background: 'var(--color-bg-secondary)' }}>
           {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+        </div>
+      )}
+
+      {isDisappearing && !editingMessageId && (
+        <div className="pdf-flex-row pdf-items-center" style={{ background: 'rgba(245, 158, 11, 0.15)', borderBottom: '1px solid #f59e0b', padding: '6px var(--space-200)', gap: '6px', color: '#f59e0b', fontSize: '11px', fontWeight: 600 }}>
+          <Timer size={14} />
+          <span>⏱️ 1시간 자동 삭제 모드 ON (전송된 메시지는 1시간 후 사라집니다)</span>
+        </div>
+      )}
+
+      {selectedAttachment && attachmentPreviewUrl && (
+        <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ background: 'var(--color-bg-secondary)', padding: 'var(--space-100) var(--space-200)', borderBottom: '1px solid var(--color-border-default)', gap: 'var(--space-150)' }}>
+          <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)', overflow: 'hidden' }}>
+            <img src={attachmentPreviewUrl} alt="Preview" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border-default)' }} />
+            <div className="pdf-flex-col" style={{ overflow: 'hidden' }}>
+              <span className="pdf-text-copy-13-mono" style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>{selectedAttachment.name}</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{(selectedAttachment.size / (1024 * 1024)).toFixed(2)} MB (전송 대기 중)</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleRemoveAttachment}
+            className="pdf-secondary-btn pdf-btn-xs"
+            style={{ width: '24px', height: '24px', padding: 0, justifyContent: 'center' }}
+            title="Remove attachment"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
@@ -105,28 +200,42 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           ref={fileInputRef} 
           style={{ display: 'none' }} 
           accept="image/*"
-          onChange={() => {
-            if (fileInputRef.current?.files?.length) {
-              handleSubmit({ preventDefault: () => {} } as any);
-            }
-          }}
+          onChange={handleFileSelect}
         />
         {!editingMessageId && (
-          <button
-            type="button"
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
-            className="pdf-secondary-btn"
-            style={{ width: '38px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0 }}
-            title="Upload Image"
-          >
-            <ImageIcon size={18} />
-          </button>
+          <>
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              className="pdf-secondary-btn"
+              style={{ width: '38px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0 }}
+              title="Upload Image (Max 25MB)"
+            >
+              <ImageIcon size={18} />
+            </button>
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => toggleDisappearingMode(roomId)}
+              className="pdf-secondary-btn"
+              style={{ 
+                width: '38px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0,
+                background: isDisappearing ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                borderColor: isDisappearing ? '#f59e0b' : 'var(--color-border-default)',
+                color: isDisappearing ? '#f59e0b' : 'var(--color-text-primary)'
+              }}
+              title="⏱️ 1시간 자동 삭제 토글"
+            >
+              <Timer size={18} />
+            </button>
+          </>
         )}
         <input
           type="text"
+          ref={textInputRef}
           className="pdf-input"
-          placeholder={editingMessageId ? 'Edit message...' : (uploading ? 'Uploading image...' : 'Type a message...')}
+          placeholder={editingMessageId ? 'Edit message...' : (uploading ? 'Sending...' : (selectedAttachment ? 'Add a caption and press send...' : 'Type a message...'))}
           value={inputText}
           onChange={handleInputChange}
           disabled={uploading}
@@ -134,7 +243,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         />
         <button
           type="submit"
-          disabled={(!inputText.trim() && !uploading) || uploading}
+          disabled={(!inputText.trim() && !selectedAttachment && !uploading) || uploading}
           className="pdf-btn-primary"
           style={{ width: '38px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0 }}
         >

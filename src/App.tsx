@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MatrixProvider, useMatrix } from './matrix/MatrixProvider';
 import { MaintenanceGuard } from './components/MaintenanceGuard';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { useUIStore } from './stores/useUIStore';
 
 // Lazy loading pages for code splitting and faster initial load
 const Auth = React.lazy(() => import('./pages/Auth').then(m => ({ default: m.Auth })));
@@ -43,6 +44,11 @@ const AppRoutes = () => {
 };
 
 function App() {
+  const theme = useUIStore((state) => state.theme);
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   return (
     <ErrorBoundary>
       <MatrixProvider>
