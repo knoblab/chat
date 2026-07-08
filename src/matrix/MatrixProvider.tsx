@@ -27,6 +27,7 @@ export const MatrixProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setIsReady(true);
       }).catch(err => {
         console.error("Failed to restore session", err);
+        logout();
         setIsReady(true); // ready but not logged in
       });
     } else {

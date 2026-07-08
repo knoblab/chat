@@ -63,15 +63,13 @@ const joinOrCreateGeneralRoom = async (client: MatrixClient, userId: string) => 
  * Create an IndexedDB-backed store for persisting sync state and crypto keys.
  * Falls back to MemoryStore if IndexedDB is unavailable.
  */
-const createStore = async () => {
+const createStore = () => {
   try {
-    const store = new sdk.IndexedDBStore({
+    return new sdk.IndexedDBStore({
       indexedDB: globalThis.indexedDB,
       dbName: 'qpi-chat-sync',
       localStorage: globalThis.localStorage,
     });
-    await store.startup();
-    return store;
   } catch (err) {
     console.warn('IndexedDBStore unavailable, falling back to MemoryStore:', err);
     return new sdk.MemoryStore();
@@ -87,7 +85,7 @@ export const initMatrixClient = async (
     matrixClient.stopClient();
   }
 
-  const store = await createStore();
+  const store = createStore();
 
   matrixClient = sdk.createClient({
     baseUrl: HOMESERVER_URL,
@@ -97,6 +95,22 @@ export const initMatrixClient = async (
     store,
     timelineSupport: true,
   });
+
+  if (store instanceof sdk.IndexedDBStore) {
+    try {
+      await store.startup();
+    } catch (err) {
+      console.warn('IndexedDBStore startup failed, falling back to MemoryStore:', err);
+      matrixClient = sdk.createClient({
+        baseUrl: HOMESERVER_URL,
+        accessToken,
+        userId,
+        deviceId,
+        store: new sdk.MemoryStore(),
+        timelineSupport: true,
+      });
+    }
+  }
 
   try {
     // Initialize Rust crypto layer for E2EE support
@@ -125,9 +139,18 @@ export const initMatrixClient = async (
   // Start syncing with larger limit for history
   await matrixClient.startClient({ initialSyncLimit: 30 });
 
-  return new Promise<MatrixClient>((resolve) => {
-    matrixClient!.once('sync' as any, async (state: string) => {
+  return new Promise<MatrixClient>((resolve, reject) => {
+    // Timeout of 15 seconds to prevent hanging the UI on sync failure
+    const timeoutId = setTimeout(() => {
+      matrixClient!.removeListener('sync' as any, syncListener);
+      reject(new Error('Matrix client sync timeout'));
+    }, 15000);
+
+    const syncListener = async (state: string, prevState: string | null, data: any) => {
+      console.log(`Matrix Client Sync State: ${state}`);
       if (state === 'PREPARED' || state === 'SYNCING') {
+        clearTimeout(timeoutId);
+        matrixClient!.removeListener('sync' as any, syncListener);
         try {
           const rooms = matrixClient!.getVisibleRooms();
           const allUserIds = new Set<string>();
@@ -160,8 +183,19 @@ export const initMatrixClient = async (
         
         // Resolve only when sync is ready
         resolve(matrixClient!);
+      } else if (state === 'ERROR') {
+        const error = data?.error;
+        const isAuthError = error?.errcode === 'M_UNKNOWN_TOKEN' || error?.httpStatus === 401;
+        if (isAuthError) {
+          clearTimeout(timeoutId);
+          matrixClient!.removeListener('sync' as any, syncListener);
+          matrixClient!.stopClient();
+          reject(new Error(error?.message || 'Invalid access token'));
+        }
       }
-    });
+    };
+
+    matrixClient!.on('sync' as any, syncListener);
   });
 };
 
