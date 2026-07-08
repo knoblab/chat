@@ -641,8 +641,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isModal = false, o
         </div>
       )}
       {profileError && (
-        <div className="pdf-text-copy-14 pdf-text-center" style={{ color: 'var(--color-functional-red)', padding: 'var(--space-050)', background: 'rgba(173, 29, 29, 0.1)', borderRadius: '6px' }}>
-          {profileError}
+        <div className="pdf-flex-col pdf-items-center" style={{ color: 'var(--color-functional-red)', padding: '12px 14px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', gap: '8px', textAlign: 'center', marginTop: '8px' }}>
+          {(profileError.includes('drive.googleapis.com') || profileError.includes('Google Drive API has not been used')) ? (
+            <>
+              <div style={{ fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-functional-red)' }}>
+                ⚠️ Google Drive API 활성화 필요 (HTTP 403)
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
+                구글 클라우드 프로젝트에서 <b>Google Drive API</b> 권한이 아직 활성화되지 않았습니다.<br />
+                아래 버튼을 클릭하여 Google Cloud Console에서 <b>[사용 설정 (Enable)]</b> 버튼을 누른 뒤, 약 1~2분 후 다시 시도해주세요.
+              </div>
+              <a
+                href={profileError.match(/https:\/\/console\.developers\.google\.com\/[^\s'"]+/)?.[0] || 'https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=17560298983'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pdf-btn-primary"
+                style={{ marginTop: '4px', textDecoration: 'none', background: 'var(--color-functional-red)', color: '#fff', padding: '8px 16px', borderRadius: '18px', fontSize: '12px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 3px 10px rgba(239, 68, 68, 0.4)' }}
+              >
+                <span>Google Drive API 사용 설정 페이지 바로가기 🔗</span>
+              </a>
+            </>
+          ) : (
+            <div className="pdf-text-copy-14">{profileError}</div>
+          )}
         </div>
       )}
 

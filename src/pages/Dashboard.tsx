@@ -11,7 +11,7 @@ import { Sidebar } from '../components/dashboard/Sidebar';
 import { MobileNav } from '../components/dashboard/MobileNav';
 import { SettingsPanel } from '../components/dashboard/SettingsPanel';
 import { Preset } from 'matrix-js-sdk';
-import { Plus, Sun, Moon, X } from 'lucide-react';
+import { Plus, Sun, Moon, X, Sparkles, UserPlus, ShieldCheck } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const { client } = useMatrix();
@@ -23,6 +23,9 @@ export const Dashboard: React.FC = () => {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomUser, setNewRoomUser] = useState('');
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -45,38 +48,40 @@ export const Dashboard: React.FC = () => {
     }
   }, [location.state, selectRoom]);
 
-  const handleCreateRoom = async () => {
+  const handleCreateRoom = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!client) return;
-    const roomName = window.prompt('새로운 채팅방 이름을 입력하세요:');
-    if (roomName === null || !roomName.trim()) return;
 
     try {
+      setCreatingRoom(true);
+      const name = newRoomName.trim() || `암호화 대화방 (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
+      const inviteList = newRoomUser.trim() ? [newRoomUser.trim()] : [];
+
       const res = await client.createRoom({
-        name: roomName.trim(),
-        preset: Preset.PublicChat,
-        visibility: 'private' as any,
+        name,
+        preset: inviteList.length > 0 ? Preset.TrustedPrivateChat : Preset.PrivateChat,
+        invite: inviteList,
         initial_state: [
           {
             type: 'm.room.encryption',
             state_key: '',
-            content: { algorithm: 'm.megolm.v1.aes-sha2' },
-          },
-          {
-            type: 'm.room.join_rules',
-            state_key: '',
-            content: { join_rule: 'public' },
-          },
-          {
-            type: 'm.room.history_visibility',
-            state_key: '',
-            content: { history_visibility: 'shared' },
+            content: {
+              algorithm: 'm.megolm.v1.aes-sha2',
+            },
           },
         ],
       });
+
       selectRoom(res.room_id);
+      setNewRoomName('');
+      setNewRoomUser('');
+      setIsProfileOpen(false);
+      setMobileTab('chats');
     } catch (err) {
       console.error('Failed to create room:', err);
-      alert('Failed to create encrypted room');
+      alert('방 생성에 실패했습니다. 유효한 Matrix User ID(@user:domain)인지 확인해주세요.');
+    } finally {
+      setCreatingRoom(false);
     }
   };
 
@@ -89,45 +94,105 @@ export const Dashboard: React.FC = () => {
       );
     }
 
+    const getMobileHeaderTitle = () => {
+      if (mobileTab === 'chats') return '채팅방';
+      if (mobileTab === 'friends') return '친구 및 초대';
+      return '설정 및 프로필';
+    };
+
     return (
       <div className="pdf-mobile-container">
         <header className="pdf-mobile-header">
-          <div className="pdf-text-heading-24 pdf-text-red" style={{ letterSpacing: '-0.02em', fontWeight: 800 }}>QPI Chat</div>
-          <div className="pdf-flex-row pdf-gap-100">
+          <div className="pdf-flex-row pdf-items-center" style={{ gap: '8px' }}>
+            <div className="pdf-text-heading-24 pdf-text-red" style={{ letterSpacing: '-0.02em', fontWeight: 800, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              QPI
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{getMobileHeaderTitle()}</span>
+            </div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border-default)', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }} title="Matrix 종단간 암호화(E2EE) 보안 적용">
+              <ShieldCheck size={13} style={{ color: 'var(--color-text-secondary)' }} />
+              <span>E2EE</span>
+            </div>
+          </div>
+
+          <div className="pdf-flex-row pdf-items-center" style={{ gap: '8px' }}>
+            {mobileTab === 'chats' && (
+              <button 
+                onClick={() => handleCreateRoom()}
+                disabled={creatingRoom}
+                className="pdf-btn-primary pdf-btn-xs"
+                style={{ height: '32px', padding: '0 10px', borderRadius: '16px', fontSize: '12px', gap: '4px', background: 'var(--color-functional-red)', opacity: creatingRoom ? 0.6 : 1 }}
+                title="새 채팅방 생성"
+              >
+                <Plus size={14} /> {creatingRoom ? '생성 중...' : '새 채팅'}
+              </button>
+            )}
+            {mobileTab === 'friends' && (
+              <button 
+                onClick={() => {
+                  const input = document.querySelector('input[placeholder*="User Code"]') as HTMLInputElement;
+                  if (input) input.focus();
+                }}
+                className="pdf-secondary-btn pdf-btn-xs"
+                style={{ height: '32px', padding: '0 10px', borderRadius: '16px', fontSize: '12px', gap: '4px' }}
+              >
+                <UserPlus size={13} /> 추가
+              </button>
+            )}
             <button 
               onClick={toggleTheme} 
               className="pdf-secondary-btn pdf-btn-xs"
-              style={{ width: '32px', height: '32px', padding: 0, justifyContent: 'center' }}
+              style={{ width: '32px', height: '32px', padding: 0, justifyContent: 'center', borderRadius: '50%' }}
               title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
             >
-              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             </button>
           </div>
         </header>
 
         <div className="pdf-mobile-content-area">
           {mobileTab === 'chats' && (
-            <div className="pdf-flex-col" style={{ padding: 'var(--space-200) 0' }}>
-              <div style={{ padding: '0 var(--space-200) var(--space-200) var(--space-200)' }}>
-                <button onClick={handleCreateRoom} className="pdf-btn-primary pdf-btn-sm pdf-w-full">
-                  <Plus size={16} /> New Encrypted Room
+            <div className="pdf-flex-col pdf-mobile-animate-in">
+              <div className="pdf-mobile-hero pdf-flex-row pdf-items-center pdf-justify-between" style={{ gap: '10px' }}>
+                <div className="pdf-flex-row pdf-items-center" style={{ gap: '8px', overflow: 'hidden' }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '8px', background: 'var(--color-functional-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
+                    <Sparkles size={15} />
+                  </div>
+                  <div className="pdf-flex-row pdf-items-center" style={{ gap: '6px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>100% E2EE 종단간 암호화</span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>• 서버 열람 불가</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleCreateRoom} 
+                  className="pdf-btn-primary" 
+                  style={{ height: '32px', padding: '0 12px', borderRadius: '16px', fontSize: '12px', fontWeight: 600, gap: '4px', flexShrink: 0 }}
+                >
+                  <Plus size={14} /> 새 채팅방
                 </button>
               </div>
-              <RoomList onSelectRoom={selectRoom} selectedRoomId={selectedRoomId} />
+              
+              <div style={{ padding: '0 var(--space-100)' }}>
+                <RoomList onSelectRoom={selectRoom} selectedRoomId={selectedRoomId} />
+              </div>
             </div>
           )}
           {mobileTab === 'friends' && (
-            <div style={{ padding: 'var(--space-200) 0' }}>
+            <div className="pdf-mobile-animate-in">
               <FriendList onSelectRoom={selectRoom} selectedRoomId={selectedRoomId} onSwitchToChats={() => setMobileTab('chats')} />
             </div>
           )}
-          {mobileTab === 'settings' && <SettingsPanel />}
+          {mobileTab === 'settings' && (
+            <div className="pdf-mobile-animate-in">
+              <SettingsPanel />
+            </div>
+          )}
         </div>
 
         <MobileNav />
       </div>
     );
   }
+
 
   return (
     <div className={`pdf-app ${selectedRoomId ? 'room-selected' : ''}`}>

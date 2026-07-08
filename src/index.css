@@ -482,7 +482,8 @@ button {
 .pdf-radius-sm { border-radius: 4px; }
 .pdf-radius-md { border-radius: 8px; }
 .pdf-radius-lg { border-radius: 16px; }
-.pdf-radius-full { border-radius: 50%; }
+.pdf-radius-full { border-radius: 9999px; }
+.pdf-radius-circle { border-radius: 50%; }
 .pdf-bg-red { background-color: var(--color-functional-red); }
 
 /* Shadows */
@@ -552,7 +553,7 @@ button {
 }
 
 /* ==========================================================================
-   9. DEDICATED MOBILE UI STYLES
+   9. DEDICATED MOBILE UI STYLES (PRODUCT-GRADE NATIVE UX)
    ========================================================================== */
 
 .pdf-mobile-container {
@@ -571,39 +572,53 @@ button {
   top: 0;
   left: 0;
   right: 0;
-  height: 56px;
+  height: calc(56px + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   background-color: var(--bg-sidebar);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
   border-bottom: 1px solid var(--color-border-default);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 var(--space-200);
+  padding-left: var(--space-200);
+  padding-right: var(--space-200);
   z-index: 90;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
 }
 
 .pdf-mobile-content-area {
   flex: 1;
   overflow-y: auto;
-  padding-bottom: 72px; /* Ensure content doesn't get cut off by bottom nav */
+  overflow-x: hidden;
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); /* Ensure zero cut-off by bottom nav */
+  -webkit-overflow-scrolling: touch;
 }
 
-.pdf-mobile-bottom-nav {
+.pdf-mobile-bottom-nav,
+.pdf-mobile-nav {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 60px;
-  background-color: var(--bg-sidebar);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border-top: 1px solid var(--color-border-default);
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: rgba(18, 18, 22, 0.88);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: space-around;
   align-items: center;
   z-index: 100;
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="light"] .pdf-mobile-bottom-nav,
+[data-theme="light"] .pdf-mobile-nav {
+  background-color: rgba(255, 255, 255, 0.88);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
 }
 
 .pdf-mobile-tab-btn {
@@ -613,29 +628,135 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-050);
+  gap: 3px;
   color: var(--color-text-secondary);
   font-size: 11px;
   font-family: var(--font-sans);
   font-weight: 500;
-  transition: color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pdf-mobile-tab-btn:active {
+  transform: scale(0.92);
 }
 
 .pdf-mobile-tab-btn.active {
   color: var(--color-functional-red);
+  font-weight: 700;
+}
+
+.pdf-mobile-tab-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.pdf-mobile-tab-btn.active .pdf-mobile-tab-pill {
+  background-color: rgba(239, 68, 68, 0.15);
+  transform: translateY(-1px);
 }
 
 .pdf-mobile-tab-btn.active::after {
   content: '';
   position: absolute;
   top: 0;
-  left: 25%;
-  right: 25%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
   height: 3px;
   background-color: var(--color-functional-red);
-  border-bottom-left-radius: 2px;
-  border-bottom-right-radius: 2px;
+  border-radius: 0 0 3px 3px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.6);
+}
+
+/* Mobile Badge on Tab or Items */
+.pdf-mobile-badge {
+  position: absolute;
+  top: -2px;
+  right: 6px;
+  background: var(--color-functional-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.5);
+  border: 2px solid var(--bg-sidebar);
+}
+
+/* Product-Grade Mobile Row Item */
+.pdf-mobile-row {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  gap: 14px;
+  border-bottom: 1px solid var(--color-border-default);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+.pdf-mobile-row:active {
+  background-color: var(--color-bg-secondary);
+  transform: scale(0.995);
+}
+
+.pdf-mobile-row.active {
+  background-color: var(--color-bg-tertiary);
+  border-left: 3px solid var(--color-functional-red);
+}
+
+/* Mobile Quick Creation Hero Card (Compact Sleek Bar) */
+.pdf-mobile-hero {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.03) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 10px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.pdf-mobile-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+@keyframes mobile-slide-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pdf-mobile-animate-in {
+  animation: mobile-slide-fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes message-slide-up {

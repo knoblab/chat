@@ -146,24 +146,31 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  const isMobile = window.innerWidth < 1024;
+
   return (
-    <div className="pdf-flex-col" style={{ background: 'var(--color-bg-primary)', borderTop: '1px solid var(--color-border-default)' }}>
+    <div className="pdf-flex-col pdf-mobile-input-bar" style={{ 
+      background: 'var(--color-bg-primary)', 
+      borderTop: '1px solid var(--color-border-default)',
+      paddingBottom: isMobile ? 'calc(8px + env(safe-area-inset-bottom, 0px))' : '0px',
+      position: 'sticky', bottom: 0, zIndex: 40
+    }}>
       {typingUsers.length > 0 && !editingMessageId && (
         <div className="pdf-text-copy-13-mono pdf-text-muted" style={{ padding: '4px var(--space-200)', fontSize: '11px', fontStyle: 'italic', background: 'var(--color-bg-secondary)' }}>
-          {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+          {typingUsers.join(', ')} {typingUsers.length === 1 ? '님이 입력 중...' : '님이 입력 중...'}
         </div>
       )}
 
       {isDisappearing && !editingMessageId && (
-        <div className="pdf-flex-row pdf-items-center" style={{ background: 'rgba(245, 158, 11, 0.15)', borderBottom: '1px solid #f59e0b', padding: '6px var(--space-200)', gap: '6px', color: '#f59e0b', fontSize: '11px', fontWeight: 600 }}>
+        <div className="pdf-flex-row pdf-items-center" style={{ background: 'rgba(245, 158, 11, 0.15)', borderBottom: '1px solid #f59e0b', padding: '6px 14px', gap: '6px', color: '#f59e0b', fontSize: '11px', fontWeight: 600 }}>
           <Timer size={14} />
           <span>⏱️ 1시간 자동 삭제 모드 ON (전송된 메시지는 1시간 후 사라집니다)</span>
         </div>
       )}
 
       {selectedAttachment && attachmentPreviewUrl && (
-        <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ background: 'var(--color-bg-secondary)', padding: 'var(--space-100) var(--space-200)', borderBottom: '1px solid var(--color-border-default)', gap: 'var(--space-150)' }}>
-          <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)', overflow: 'hidden' }}>
+        <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ background: 'var(--color-bg-secondary)', padding: '10px 14px', borderBottom: '1px solid var(--color-border-default)', gap: '12px' }}>
+          <div className="pdf-flex-row pdf-items-center" style={{ gap: '10px', overflow: 'hidden' }}>
             {selectedAttachment.type.startsWith('video/') ? (
               <video src={attachmentPreviewUrl} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border-default)', background: '#000' }} muted playsInline />
             ) : (
@@ -178,31 +185,32 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             type="button"
             onClick={handleRemoveAttachment}
             className="pdf-secondary-btn pdf-btn-xs"
-            style={{ width: '24px', height: '24px', padding: 0, justifyContent: 'center' }}
-            title="Remove attachment"
+            style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', borderRadius: '14px' }}
+            title="첨부 취소"
           >
-            <X size={14} />
+            <X size={15} />
           </button>
         </div>
       )}
 
       {editingMessageId && (
-        <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ background: 'var(--color-bg-secondary)', padding: 'var(--space-050) var(--space-200)', borderBottom: '1px solid var(--color-border-default)' }}>
-          <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-050)', fontSize: '12px' }}>
-            <Edit2 size={12} style={{ color: 'var(--color-functional-red)' }} />
-            <span>Editing message</span>
+        <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ background: 'var(--color-bg-secondary)', padding: '8px 14px', borderBottom: '1px solid var(--color-border-default)' }}>
+          <div className="pdf-flex-row pdf-items-center" style={{ gap: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--color-functional-red)' }}>
+            <Edit2 size={13} />
+            <span>메시지 수정 중</span>
           </div>
           <button
+            type="button"
             onClick={onCancelEdit}
             className="pdf-secondary-btn pdf-btn-xs"
-            style={{ width: '20px', height: '20px', padding: 0, justifyContent: 'center', border: 'none', background: 'transparent' }}
+            style={{ width: '24px', height: '24px', padding: 0, justifyContent: 'center', borderRadius: '12px' }}
           >
             <X size={14} />
           </button>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="pdf-flex-row pdf-gap-100" style={{ padding: 'var(--space-150) var(--space-200)' }}>
+      <form onSubmit={handleSubmit} className="pdf-flex-row pdf-items-center" style={{ padding: isMobile ? '8px 12px' : '12px 16px', gap: '8px' }}>
         <input 
           type="file" 
           ref={fileInputRef} 
@@ -217,11 +225,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
               className="pdf-secondary-btn"
-              style={{ width: '44px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '2px' }}
-              title="이미지/동영상 업로드 (이미지 최대 25MB, 동영상 최대 45MB)"
+              style={{ width: isMobile ? '40px' : '42px', height: isMobile ? '40px' : '42px', padding: 0, justifyContent: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '2px', borderRadius: '20px', background: 'var(--color-bg-secondary)', border: 'none' }}
+              title="이미지/동영상 업로드"
             >
-              <ImageIcon size={16} />
-              <Film size={16} />
+              <ImageIcon size={17} />
+              <Film size={15} />
             </button>
             <button
               type="button"
@@ -229,12 +237,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               onClick={() => toggleDisappearingMode(roomId)}
               className="pdf-secondary-btn"
               style={{ 
-                width: '38px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0,
-                background: isDisappearing ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
-                borderColor: isDisappearing ? '#f59e0b' : 'var(--color-border-default)',
+                width: isMobile ? '40px' : '42px', height: isMobile ? '40px' : '42px', padding: 0, justifyContent: 'center', flexShrink: 0, borderRadius: '20px',
+                background: isDisappearing ? 'rgba(245, 158, 11, 0.2)' : 'var(--color-bg-secondary)',
+                border: isDisappearing ? '1px solid #f59e0b' : 'none',
                 color: isDisappearing ? '#f59e0b' : 'var(--color-text-primary)'
               }}
-              title="⏱️ 1시간 자동 삭제 토글"
+              title="1시간 자동 삭제 토글"
             >
               <Timer size={18} />
             </button>
@@ -244,17 +252,30 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           type="text"
           ref={textInputRef}
           className="pdf-input"
-          placeholder={editingMessageId ? 'Edit message...' : (uploading ? 'Sending...' : (selectedAttachment ? 'Add a caption and press send...' : 'Type a message...'))}
+          placeholder={editingMessageId ? '수정할 메시지를 입력하세요...' : (uploading ? '전송 중...' : (selectedAttachment ? '설명(캡션) 입력 후 전송...' : '메시지 입력...'))}
           value={inputText}
           onChange={handleInputChange}
           disabled={uploading}
-          style={{ flex: 1 }}
+          style={{ 
+            flex: 1, 
+            height: isMobile ? '40px' : '42px', 
+            borderRadius: '20px', 
+            paddingLeft: '16px', 
+            paddingRight: '16px', 
+            fontSize: isMobile ? '14px' : '15px',
+            background: 'var(--color-bg-secondary)',
+            border: '1px solid var(--color-border-default)'
+          }}
         />
         <button
           type="submit"
           disabled={(!inputText.trim() && !selectedAttachment && !uploading) || uploading}
           className="pdf-btn-primary"
-          style={{ width: '38px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0 }}
+          style={{ 
+            width: isMobile ? '40px' : '42px', height: isMobile ? '40px' : '42px', 
+            padding: 0, justifyContent: 'center', flexShrink: 0, borderRadius: '20px',
+            boxShadow: (!inputText.trim() && !selectedAttachment) ? 'none' : '0 3px 10px rgba(239, 68, 68, 0.4)'
+          }}
         >
           <Send size={16} />
         </button>
