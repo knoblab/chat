@@ -88,25 +88,57 @@ export const Auth: React.FC = () => {
       
       if (!user) throw new Error('Failed to get user profile from Google');
 
-      // 2. Map Firebase UID to Matrix Username (must be lowercase, 5-characters)
-      const matrixUsername = generate5CharId(user.uid);
+      // 2. Determine candidate usernames to support all historical versions (v0: f_xyz, v1: a1234, v2: a1234_v2)
+      const usernamesToTry = Array.from(new Set([
+        generate5CharId(user.uid),                    // Current v2 format (a1234_v2)
+        generate5CharId(user.uid).replace('_v2', ''), // v1 format (a1234)
+        `f_${user.uid.toLowerCase()}`                 // v0 format (f_xyz)
+      ]));
       
-      // Determine secure password for Matrix based on Firebase UID and secret salt
-      const salt = import.meta.env.VITE_MATRIX_SECRET_SALT || '_qpi_secure_salt_2026';
-      const matrixPassword = `${user.uid}_${salt}`;
+      // Determine secure password candidates to support both legacy accounts and clean salt formats
+      const rawSalt = import.meta.env.VITE_MATRIX_SECRET_SALT || 'qpi_secure_salt_2026';
+      const cleanSalt = rawSalt.replace(/^_+/, '');
+      const passwordsToTry = Array.from(new Set([
+        `${user.uid}_${cleanSalt}`,         // Standard format (one underscore: uid_salt)
+        `${user.uid}__${cleanSalt}`,        // Legacy format from Phase 1 (two underscores: uid__salt)
+        `${user.uid}_qpi_secure_salt_2026`, // Default legacy fallback
+        `${user.uid}__qpi_secure_salt_2026` // Default legacy fallback with double underscore
+      ]));
 
       const tempClient = createClient({ baseUrl: HOMESERVER_URL });
-      let authResult;
+      let authResult = null;
+      let successfulUsername = usernamesToTry[0];
+      let successfulPassword = passwordsToTry[0];
 
-      try {
-        // 3. Try to log in
-        authResult = await tempClient.loginWithPassword(matrixUsername, matrixPassword);
-      } catch (_loginErr: any) {
-        // User account likely doesn't exist, auto-register
-        console.log('Matrix account not found. Auto-registering...');
+      // 3. Try to log in with candidate username & password combinations
+      for (const uname of usernamesToTry) {
+        for (const pwd of passwordsToTry) {
+          try {
+            authResult = await tempClient.loginWithPassword(uname, pwd);
+            successfulUsername = uname;
+            successfulPassword = pwd;
+            console.log('Successfully logged in with Matrix credentials:', uname);
+            break;
+          } catch (_loginErr: any) {
+            // Try next candidate combination
+          }
+        }
+        if (authResult) break;
+      }
+
+      if (!authResult) {
+        // User account likely doesn't exist, auto-register with latest v2 username & clean salt
+        console.log('Matrix account not found or login failed. Attempting auto-registration...');
         try {
-          authResult = await handleRawRegister(matrixUsername, matrixPassword);
+          authResult = await handleRawRegister(successfulUsername, successfulPassword);
         } catch (regErr: any) {
+          const errMsg = regErr?.message || '';
+          if (errMsg.toLowerCase().includes('taken') || errMsg.toLowerCase().includes('in use') || errMsg.includes('M_USER_IN_USE')) {
+            throw new Error(
+              `이미 가입된 Matrix 계정(${successfulUsername})의 비밀번호가 일치하지 않습니다. 이전 로그인 시점과 환경변수(VITE_MATRIX_SECRET_SALT)가 달라졌을 수 있으므로 확인이 필요합니다.`,
+              { cause: regErr }
+            );
+          }
           console.error('Matrix auto-registration failed:', regErr);
           throw regErr;
         }
