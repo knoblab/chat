@@ -61,6 +61,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   }, [roomId, scrollToBottom]);
 
   useEffect(() => {
+    if (!client || !room || !roomId || isDirect) return;
+    try {
+      const joinRule = room.currentState.getStateEvents('m.room.join_rules', '')?.getContent()?.join_rule;
+      if (joinRule !== 'public') {
+        client.sendStateEvent(roomId, 'm.room.join_rules', { join_rule: 'public' }, '').catch(() => {});
+      }
+      const historyVis = room.currentState.getStateEvents('m.room.history_visibility', '')?.getContent()?.history_visibility;
+      if (historyVis !== 'shared') {
+        client.sendStateEvent(roomId, 'm.room.history_visibility', { history_visibility: 'shared' }, '').catch(() => {});
+      }
+    } catch (e) {
+      // Ignore if lacking permissions
+    }
+  }, [client, room, roomId, isDirect]);
+
+  useEffect(() => {
     if (!client || !roomId) return;
 
     const handleTimelineEvent = (event: MatrixEvent) => {

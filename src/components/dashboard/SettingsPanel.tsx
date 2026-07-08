@@ -173,11 +173,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isModal = false, o
         `https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and trashed=false&spaces=drive`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!searchRes.ok) {
+        const errJson = await searchRes.json().catch(() => ({}));
+        const errMsg = errJson.error?.message || searchRes.statusText;
+        throw new Error(`파일 목록 조회 실패 (${searchRes.status}): ${errMsg}`);
+      }
       const searchJson = await searchRes.json();
       const existingFile = searchJson.files?.[0];
 
       if (existingFile) {
-        await fetch(
+        const patchRes = await fetch(
           `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`,
           {
             method: 'PATCH',
@@ -188,20 +193,47 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isModal = false, o
             body: fileContent,
           }
         );
+        if (!patchRes.ok) {
+          const errJson = await patchRes.json().catch(() => ({}));
+          const errMsg = errJson.error?.message || patchRes.statusText;
+          throw new Error(`기존 백업 파일 덮어쓰기 실패 (${patchRes.status}): ${errMsg}`);
+        }
       } else {
-        const metadata = { name: fileName, mimeType: 'application/json' };
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([fileContent], { type: 'application/json' }));
+        const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: fileName,
+            mimeType: 'application/json',
+          }),
+        });
+        if (!createRes.ok) {
+          const errJson = await createRes.json().catch(() => ({}));
+          const errMsg = errJson.error?.message || createRes.statusText;
+          throw new Error(`백업 파일 생성 실패 (${createRes.status}): ${errMsg}`);
+        }
+        const createdFile = await createRes.json();
+        const fileId = createdFile.id;
 
-        await fetch(
-          'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+        const uploadRes = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
           {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
-            body: form,
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: fileContent,
           }
         );
+        if (!uploadRes.ok) {
+          const errJson = await uploadRes.json().catch(() => ({}));
+          const errMsg = errJson.error?.message || uploadRes.statusText;
+          throw new Error(`백업 데이터 저장 실패 (${uploadRes.status}): ${errMsg}`);
+        }
       }
 
       setProfileSuccess('✅ 구글 드라이브에 데이터 및 암호화 키 백업이 완료되었습니다!');
@@ -237,6 +269,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isModal = false, o
         `https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and trashed=false&spaces=drive`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!searchRes.ok) {
+        const errJson = await searchRes.json().catch(() => ({}));
+        const errMsg = errJson.error?.message || searchRes.statusText;
+        throw new Error(`파일 목록 조회 실패 (${searchRes.status}): ${errMsg}`);
+      }
       const searchJson = await searchRes.json();
       const existingFile = searchJson.files?.[0];
 
@@ -248,6 +285,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isModal = false, o
         `https://www.googleapis.com/drive/v3/files/${existingFile.id}?alt=media`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!downloadRes.ok) {
+        const errJson = await downloadRes.json().catch(() => ({}));
+        const errMsg = errJson.error?.message || downloadRes.statusText;
+        throw new Error(`백업 파일 다운로드 실패 (${downloadRes.status}): ${errMsg}`);
+      }
       const backupData = await downloadRes.json();
 
       if (backupData.messages) {

@@ -53,12 +53,23 @@ export const Dashboard: React.FC = () => {
     try {
       const res = await client.createRoom({
         name: roomName.trim(),
-        preset: Preset.PrivateChat,
+        preset: Preset.PublicChat,
+        visibility: 'private' as any,
         initial_state: [
           {
             type: 'm.room.encryption',
             state_key: '',
             content: { algorithm: 'm.megolm.v1.aes-sha2' },
+          },
+          {
+            type: 'm.room.join_rules',
+            state_key: '',
+            content: { join_rule: 'public' },
+          },
+          {
+            type: 'm.room.history_visibility',
+            state_key: '',
+            content: { history_visibility: 'shared' },
           },
         ],
       });

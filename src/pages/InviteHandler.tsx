@@ -42,7 +42,11 @@ export const InviteHandler: React.FC = () => {
         navigate('/', { state: { openRoomId: roomId }, replace: true });
       } catch (err: any) {
         console.error('Failed to join room via invite link:', err);
-        setError(err.message || 'Failed to join the chat room. It may be private or invalid.');
+        let msg = err.message || '채팅방 접속에 실패했습니다. 유효하지 않거나 삭제된 방일 수 있습니다.';
+        if (msg.includes('403') || msg.includes('not invited')) {
+          msg = '이 채팅방은 현재 초대 전용(비공개)으로 설정되어 있습니다. 방장이 채팅방에 접속하거나 초대 링크를 다시 공유하면 링크 접속이 자동 활성화됩니다.';
+        }
+        setError(msg);
       } finally {
         setJoining(false);
       }
