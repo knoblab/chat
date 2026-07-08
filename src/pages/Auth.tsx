@@ -91,8 +91,9 @@ export const Auth: React.FC = () => {
       // 2. Map Firebase UID to Matrix Username (must be lowercase, 5-characters)
       const matrixUsername = generate5CharId(user.uid);
       
-      // Determine secure password for Matrix based on Firebase UID
-      const matrixPassword = `${user.uid}_qpi_secure_salt_2026`;
+      // Determine secure password for Matrix based on Firebase UID and secret salt
+      const salt = import.meta.env.VITE_MATRIX_SECRET_SALT || '_qpi_secure_salt_2026';
+      const matrixPassword = `${user.uid}_${salt}`;
 
       const tempClient = createClient({ baseUrl: HOMESERVER_URL });
       let authResult;
@@ -100,7 +101,7 @@ export const Auth: React.FC = () => {
       try {
         // 3. Try to log in
         authResult = await tempClient.loginWithPassword(matrixUsername, matrixPassword);
-      } catch (loginErr: any) {
+      } catch (_loginErr: any) {
         // User account likely doesn't exist, auto-register
         console.log('Matrix account not found. Auto-registering...');
         try {

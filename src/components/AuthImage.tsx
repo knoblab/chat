@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useMatrix } from '../matrix/MatrixProvider';
+import { fetchMxcBlob } from '../utils/media';
 
 interface AuthImageProps {
   mxcUrl: string;
@@ -21,71 +22,30 @@ export const AuthImage: React.FC<AuthImageProps> = ({ mxcUrl, alt, style, classN
   const blobUrlRef = useRef<string>('');
 
   useEffect(() => {
-    if (!client || !mxcUrl || !mxcUrl.startsWith('mxc://')) {
-      setLoading(false);
-      setError(true);
-      return;
-    }
-
-    const token = client.getAccessToken();
-    const baseUrl = client.baseUrl;
-    const parts = mxcUrl.substring(6).split('/');
-    if (parts.length < 2) {
-      setLoading(false);
-      setError(true);
-      return;
-    }
-    const serverName = parts[0];
-    const mediaId = parts.slice(1).join('/');
-
     let cancelled = false;
 
     const loadImage = async () => {
-      // Try endpoints in order: authenticated client API first, then legacy media API
-      const endpoints = [
-        `${baseUrl}/_matrix/client/v1/media/download/${serverName}/${mediaId}`,
-        `${baseUrl}/_matrix/media/v3/download/${serverName}/${mediaId}`,
-        `${baseUrl}/_matrix/media/r0/download/${serverName}/${mediaId}`,
-      ];
+      setLoading(true);
+      setError(false);
+      
+      const blob = await fetchMxcBlob(client, mxcUrl);
+      if (cancelled) return;
 
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      for (const url of endpoints) {
-        try {
-          const res = await fetch(url, { headers });
-          if (res.ok) {
-            const blob = await res.blob();
-            if (!cancelled) {
-              // Revoke previous blob URL if any
-              if (blobUrlRef.current) {
-                URL.revokeObjectURL(blobUrlRef.current);
-              }
-              const objUrl = URL.createObjectURL(blob);
-              blobUrlRef.current = objUrl;
-              setBlobUrl(objUrl);
-              setLoading(false);
-              setError(false);
-            }
-            return;
-          }
-        } catch {
-          // Try next endpoint
-          continue;
+      if (blob) {
+        if (blobUrlRef.current) {
+          URL.revokeObjectURL(blobUrlRef.current);
         }
-      }
-
-      // All endpoints failed
-      if (!cancelled) {
+        const objUrl = URL.createObjectURL(blob);
+        blobUrlRef.current = objUrl;
+        setBlobUrl(objUrl);
+        setLoading(false);
+        setError(false);
+      } else {
         setLoading(false);
         setError(true);
       }
     };
 
-    setLoading(true);
-    setError(false);
     loadImage();
 
     return () => {
@@ -124,35 +84,4 @@ export const AuthImage: React.FC<AuthImageProps> = ({ mxcUrl, alt, style, classN
   }
 
   return <img src={blobUrl} alt={alt} style={style} className={className} onClick={onClick} />;
-};
-
-/**
- * Check if a room is a Direct Message room by querying m.direct account data.
- * This is the correct way per the Matrix spec (not m.room.create content).
- */
-export const isRoomDirect = (client: any, roomId: string): boolean => {
-  const room = client.getRoom(roomId);
-  if (!room) return false;
-
-  // 1. Check strict m.direct account data
-  const directEvent = client.getAccountData('m.direct');
-  if (directEvent) {
-    const content = directEvent.getContent();
-    const found = Object.values(content).some((roomIds: any) =>
-      Array.isArray(roomIds) && (roomIds as string[]).includes(roomId)
-    );
-    if (found) return true;
-  }
-
-  // 2. Fallback: If Synapse hasn't updated m.direct, check heuristics
-  // If the room has 2 or fewer members and doesn't have an explicit room name set
-  const members = room.getMembers();
-  if (members.length <= 2) {
-    const nameEvent = room.currentState.getStateEvents('m.room.name', '');
-    if (!nameEvent) {
-      return true;
-    }
-  }
-
-  return false;
 };

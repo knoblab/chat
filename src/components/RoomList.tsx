@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Room } from 'matrix-js-sdk';
+import React from 'react';
+import { useRooms } from '../hooks/useRooms';
 import { useMatrix } from '../matrix/MatrixProvider';
-import { isRoomDirect } from './AuthImage';
 import { Hash, LogOut, Lock } from 'lucide-react';
 
 interface RoomListProps {
@@ -9,121 +8,17 @@ interface RoomListProps {
   selectedRoomId: string | null;
 }
 
-interface RoomInfo {
-  room: Room;
-  isDirect: boolean;
-  displayName: string;
-  avatarLetter: string;
-  lastActivity: number;
-}
-
 export const RoomList: React.FC<RoomListProps> = ({ onSelectRoom, selectedRoomId }) => {
   const { client } = useMatrix();
-  const [roomInfos, setRoomInfos] = useState<RoomInfo[]>([]);
+  const { roomInfos, handleLeaveRoom } = useRooms();
 
-  const getOtherMember = (room: Room) => {
-    if (!client) return null;
-    const myId = client.getUserId();
-    const members = room.getMembers();
-    return members.find(m => m.userId !== myId && (m.membership === 'join' || m.membership === 'invite'));
-  };
-
-  const updateRooms = () => {
-    if (!client) return;
-    const allRooms = client.getVisibleRooms();
-
-    const infos: RoomInfo[] = allRooms
-      .filter(room => {
-        // Only show rooms the user has joined
-        return room.getMyMembership() === 'join';
-      })
-      .map(room => {
-        const isDirect = isRoomDirect(client, room.roomId);
-
-        // For DM rooms: check if the other member has actually joined
-        // (if they haven't, it's a pending sent request — skip it)
-        if (isDirect) {
-          const other = getOtherMember(room);
-          if (!other || other.membership !== 'join') {
-            return null; // pending request, don't show in chat list
-          }
-        }
-
-        // Determine display name and avatar
-        let displayName = room.name || 'Unnamed Room';
-        let avatarLetter = '#';
-
-        if (isDirect) {
-          const other = getOtherMember(room);
-          if (other) {
-            displayName = other.name || other.userId.split(':')[0].substring(1);
-            avatarLetter = displayName.charAt(0).toUpperCase();
-          }
-        } else {
-          avatarLetter = '#';
-        }
-
-        // Get last activity timestamp for sorting
-        const timeline = room.getLiveTimeline()?.getEvents();
-        const lastEvent = timeline && timeline.length > 0 ? timeline[timeline.length - 1] : null;
-        
-        let lastActivity = 0;
-        if (lastEvent) {
-          lastActivity = lastEvent.getTs();
-        } else {
-          try {
-            const createEvent = room.currentState.getStateEvents('m.room.create', '');
-            if (createEvent) lastActivity = createEvent.getTs();
-          } catch(e) {}
-        }
-
-        return { room, isDirect, displayName, avatarLetter, lastActivity };
-      })
-      .filter(Boolean) as RoomInfo[];
-
-    // Sort: most recent activity first
-    infos.sort((a, b) => b.lastActivity - a.lastActivity);
-
-    setRoomInfos(infos);
-  };
-
-  const handleLeaveRoom = async (e: React.MouseEvent, roomId: string) => {
+  const onLeaveClick = async (e: React.MouseEvent, roomId: string) => {
     e.stopPropagation();
-    if (!client) return;
-    if (!confirm('Are you sure you want to leave and delete this room?')) return;
-
-    try {
-      await client.leave(roomId);
-      await client.forget(roomId);
-      if (selectedRoomId === roomId) {
-        onSelectRoom('');
-      }
-      updateRooms();
-    } catch (err: any) {
-      console.error('Failed to leave room:', err);
-      alert(err.message || 'Failed to leave room');
+    const success = await handleLeaveRoom(roomId);
+    if (success && selectedRoomId === roomId) {
+      onSelectRoom('');
     }
   };
-
-  useEffect(() => {
-    if (!client) return;
-
-    updateRooms();
-
-    client.on('Room' as any, updateRooms);
-    client.on('Room.name' as any, updateRooms);
-    client.on('Room.myMembership' as any, updateRooms);
-    client.on('Room.timeline' as any, updateRooms);
-    client.on('RoomState.members' as any, updateRooms);
-
-    return () => {
-      client.removeListener('Room' as any, updateRooms);
-      client.removeListener('Room.name' as any, updateRooms);
-      client.removeListener('Room.myMembership' as any, updateRooms);
-      client.removeListener('Room.timeline' as any, updateRooms);
-      client.removeListener('RoomState.members' as any, updateRooms);
-    };
-  }, [client]);
 
   return (
     <div className="pdf-flex-col" style={{ height: '100%', padding: 'var(--space-100) 0' }}>
@@ -173,7 +68,7 @@ export const RoomList: React.FC<RoomListProps> = ({ onSelectRoom, selectedRoomId
               {/* Leave button (hidden for General Chat) */}
               {info.displayName !== 'General Chat' && (
                 <button 
-                  onClick={(e) => handleLeaveRoom(e, info.room.roomId)}
+                  onClick={(e) => onLeaveClick(e, info.room.roomId)}
                   className="pdf-secondary-btn pdf-btn-xs"
                   style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', flexShrink: 0, opacity: 0.5, border: 'none', background: 'transparent' }}
                   title="Leave & Delete"

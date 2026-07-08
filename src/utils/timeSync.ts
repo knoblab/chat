@@ -102,17 +102,16 @@ export const getSecondsUntilMaintenanceEnd = (date: Date): number => {
 
   const { hour, minute, second } = getKSTTimeInfo(date);
   
-  let targetMinutes = 0;
   if (hour === 23) {
     // It's 23:55 ~ 23:59.
     // Time until 24:00 (midnight) is (60 - minute - 1) minutes + (60 - second) seconds.
     // Plus 10 minutes until 00:10.
-    targetMinutes = (60 - minute - 1) + 10;
+    const targetMinutes = (60 - minute - 1) + 10;
     return targetMinutes * 60 + (60 - second);
   } else if (hour === 0) {
     // It's 00:00 ~ 00:09.
     // Time until 00:10 is (10 - minute - 1) minutes + (60 - second) seconds.
-    targetMinutes = 10 - minute - 1;
+    const targetMinutes = 10 - minute - 1;
     return targetMinutes * 60 + (60 - second);
   }
   return 0;
