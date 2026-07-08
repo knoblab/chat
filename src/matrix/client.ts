@@ -1,7 +1,7 @@
 import * as sdk from 'matrix-js-sdk';
 import { MatrixClient } from 'matrix-js-sdk';
 
-export const HOMESERVER_URL = 'https://chating.qpi.digital';
+export const HOMESERVER_URL = 'https://matrix.qpi.digital';
 
 let matrixClient: MatrixClient | null = null;
 
