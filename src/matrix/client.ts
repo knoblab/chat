@@ -146,7 +146,7 @@ export const initMatrixClient = async (
       reject(new Error('Matrix client sync timeout'));
     }, 15000);
 
-    const syncListener = async (state: string, prevState: string | null, data: any) => {
+    const syncListener = async (state: string, _prevState: string | null, data: any) => {
       console.log(`Matrix Client Sync State: ${state}`);
       if (state === 'PREPARED' || state === 'SYNCING') {
         clearTimeout(timeoutId);
