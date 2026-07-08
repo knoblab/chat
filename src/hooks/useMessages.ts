@@ -53,6 +53,7 @@ export const useMessages = (roomId: string) => {
         let body: string;
         let msgtype: string;
         let url: string;
+        let info: any;
         let isEdited = false;
         let isDisappearing = false;
         let expiryTs: number | undefined = undefined;
@@ -73,6 +74,7 @@ export const useMessages = (roomId: string) => {
           body = newContent.body || '';
           msgtype = newContent.msgtype || 'm.text';
           url = newContent.url || '';
+          info = newContent.info;
           isEdited = true;
           if (newContent.org_qpi_disappearing || newContent.expiry_ts) {
             isDisappearing = true;
@@ -82,6 +84,7 @@ export const useMessages = (roomId: string) => {
           body = c.body || '';
           msgtype = c.msgtype || 'm.text';
           url = c.url || '';
+          info = c.info;
         }
 
         const isReadByOther = (otherMember && typeof currentRoom.hasUserReadEvent === 'function')
@@ -94,6 +97,7 @@ export const useMessages = (roomId: string) => {
           body,
           msgtype,
           url,
+          info,
           timestamp: event.getTs(),
           isEncrypted: event.isEncrypted(),
           isEdited,

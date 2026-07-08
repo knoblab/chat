@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useMatrix } from '../../matrix/MatrixProvider';
 import { useChatStore } from '../../stores/useChatStore';
-import { Send, Image as ImageIcon, Edit2, X, Timer } from 'lucide-react';
+import { Send, Image as ImageIcon, Film, Edit2, X, Timer } from 'lucide-react';
 
 interface MessageInputProps {
   roomId: string;
@@ -86,9 +86,13 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 25MB Check
-    if (file.size > 25 * 1024 * 1024) {
-      alert('단일 파일 업로드는 최대 25MB까지만 가능합니다.');
+    const isVideo = file.type.startsWith('video/');
+    const maxSize = isVideo ? 45 * 1024 * 1024 : 25 * 1024 * 1024;
+    const sizeLabel = isVideo ? '45MB' : '25MB';
+
+    // Size Check
+    if (file.size > maxSize) {
+      alert(`단일 ${isVideo ? '동영상' : '파일'} 업로드는 최대 ${sizeLabel}까지만 가능합니다.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -160,10 +164,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       {selectedAttachment && attachmentPreviewUrl && (
         <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ background: 'var(--color-bg-secondary)', padding: 'var(--space-100) var(--space-200)', borderBottom: '1px solid var(--color-border-default)', gap: 'var(--space-150)' }}>
           <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)', overflow: 'hidden' }}>
-            <img src={attachmentPreviewUrl} alt="Preview" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border-default)' }} />
+            {selectedAttachment.type.startsWith('video/') ? (
+              <video src={attachmentPreviewUrl} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border-default)', background: '#000' }} muted playsInline />
+            ) : (
+              <img src={attachmentPreviewUrl} alt="Preview" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border-default)' }} />
+            )}
             <div className="pdf-flex-col" style={{ overflow: 'hidden' }}>
               <span className="pdf-text-copy-13-mono" style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>{selectedAttachment.name}</span>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{(selectedAttachment.size / (1024 * 1024)).toFixed(2)} MB (전송 대기 중)</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{(selectedAttachment.size / (1024 * 1024)).toFixed(2)} MB ({selectedAttachment.type.startsWith('video/') ? '동영상 썸네일 자동추출 대기' : '전송 대기 중'})</span>
             </div>
           </div>
           <button
@@ -199,7 +207,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           type="file" 
           ref={fileInputRef} 
           style={{ display: 'none' }} 
-          accept="image/*"
+          accept="image/*,video/*"
           onChange={handleFileSelect}
         />
         {!editingMessageId && (
@@ -209,10 +217,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
               className="pdf-secondary-btn"
-              style={{ width: '38px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0 }}
-              title="Upload Image (Max 25MB)"
+              style={{ width: '44px', height: '38px', padding: 0, justifyContent: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '2px' }}
+              title="이미지/동영상 업로드 (이미지 최대 25MB, 동영상 최대 45MB)"
             >
-              <ImageIcon size={18} />
+              <ImageIcon size={16} />
+              <Film size={16} />
             </button>
             <button
               type="button"

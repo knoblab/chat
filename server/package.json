@@ -1,0 +1,17 @@
+{
+  "name": "qpi-video-upload-server",
+  "version": "1.0.0",
+  "description": "Video streaming upload service and HDD storage cleanup daemon",
+  "main": "upload-service.js",
+  "scripts": {
+    "start": "node upload-service.js",
+    "cleanup": "node cron-cleanup.js",
+    "cleanup:daemon": "node cron-cleanup.js --daemon"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

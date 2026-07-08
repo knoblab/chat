@@ -6,6 +6,7 @@ export interface Message {
   isEncrypted: boolean;
   msgtype?: string;
   url?: string;
+  info?: any;
   isEdited?: boolean;
   isReadByOther?: boolean;
   isDisappearing?: boolean;

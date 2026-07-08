@@ -652,3 +652,34 @@ button {
 .animate-message {
   animation: message-slide-up 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
+
+/* ==========================================================================
+   10. LINK PREVIEW & SKELETON LOADERS
+   ========================================================================== */
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg, 
+    var(--color-bg-secondary) 25%, 
+    var(--color-border-default) 50%, 
+    var(--color-bg-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite linear;
+}
+
+.link-preview-card:hover {
+  border-color: var(--color-border-hover) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px);
+}
+

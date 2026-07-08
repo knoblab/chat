@@ -36,8 +36,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
   const handleShareLink = () => {
     if (client && roomId && !isDirect) {
-      client.sendStateEvent(roomId, 'm.room.join_rules', { join_rule: 'public' }, '').catch(() => {});
-      client.sendStateEvent(roomId, 'm.room.history_visibility', { history_visibility: 'shared' }, '').catch(() => {});
+      client.sendStateEvent(roomId, 'm.room.join_rules' as any, { join_rule: 'public' }, '').catch(() => {});
+      client.sendStateEvent(roomId, 'm.room.history_visibility' as any, { history_visibility: 'shared' }, '').catch(() => {});
     }
     const inviteUrl = `${window.location.origin}/invite/${encodeURIComponent(roomId)}`;
     navigator.clipboard.writeText(inviteUrl)

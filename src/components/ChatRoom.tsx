@@ -9,9 +9,10 @@ import { MessageList } from './chat/MessageList';
 import { MessageInput } from './chat/MessageInput';
 import { InviteModal } from './chat/InviteModal';
 import type { Message } from '../types';
-import { Edit2, Trash2, Download, ArrowDown } from 'lucide-react';
+import { Edit2, Trash2, Download, ArrowDown, Copy } from 'lucide-react';
 import { downloadMxcMedia } from '../utils/media';
 import { optimizeImage } from '../utils/imageOptimizer';
+import { processVideoForUpload } from '../utils/videoOptimizer';
 import type { VirtuosoHandle } from 'react-virtuoso';
 
 interface ChatRoomProps {
@@ -29,13 +30,34 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [showNewMsgPill, setShowNewMsgPill] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState<Message[]>([]);
+
+  const updatePendingProgress = (id: string, progress: number, error?: boolean) => {
+    setPendingUploads(prev => prev.map(m => {
+      if (m.id === id) {
+        return {
+          ...m,
+          info: {
+            ...m.info,
+            uploadProgress: progress,
+            uploadError: error,
+          }
+        };
+      }
+      return m;
+    }));
+  };
+
+  const removePendingUpload = (id: string) => {
+    setPendingUploads(prev => prev.filter(m => m.id !== id));
+  };
 
   // Edit state
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
 
   // Context Menu State
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, msgId: string, isImage: boolean, body: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, msgId: string, isImage: boolean, body: string, isMe: boolean } | null>(null);
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -53,7 +75,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
     document.addEventListener('click', closeMenu);
-    return () => document.removeEventListener('click', closeMenu);
+    document.addEventListener('touchstart', closeMenu);
+    return () => {
+      document.removeEventListener('click', closeMenu);
+      document.removeEventListener('touchstart', closeMenu);
+    };
   }, []);
 
   useEffect(() => {
@@ -63,15 +89,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   useEffect(() => {
     if (!client || !room || !roomId || isDirect) return;
     try {
-      const joinRule = room.currentState.getStateEvents('m.room.join_rules', '')?.getContent()?.join_rule;
+      const joinRule = room.currentState.getStateEvents('m.room.join_rules' as any, '')?.getContent()?.join_rule;
       if (joinRule !== 'public') {
-        client.sendStateEvent(roomId, 'm.room.join_rules', { join_rule: 'public' }, '').catch(() => {});
+        client.sendStateEvent(roomId, 'm.room.join_rules' as any, { join_rule: 'public' }, '').catch(() => {});
       }
-      const historyVis = room.currentState.getStateEvents('m.room.history_visibility', '')?.getContent()?.history_visibility;
+      const historyVis = room.currentState.getStateEvents('m.room.history_visibility' as any, '')?.getContent()?.history_visibility;
       if (historyVis !== 'shared') {
-        client.sendStateEvent(roomId, 'm.room.history_visibility', { history_visibility: 'shared' }, '').catch(() => {});
+        client.sendStateEvent(roomId, 'm.room.history_visibility' as any, { history_visibility: 'shared' }, '').catch(() => {});
       }
-    } catch (e) {
+    } catch (_e) {
       // Ignore if lacking permissions
     }
   }, [client, room, roomId, isDirect]);
@@ -130,25 +156,194 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     } : {};
 
     if (file) {
-      try {
-        const optimizedFile = await optimizeImage(file, 1920, 0.85);
-        const uploadRes = await client.uploadContent(optimizedFile);
-        const mxcUrl = uploadRes.content_uri;
-        if (mxcUrl) {
-          await client.sendMessage(roomId, {
-            msgtype: MsgType.Image,
-            body: text.trim() || optimizedFile.name || 'image',
-            url: mxcUrl,
-            info: {
-              mimetype: optimizedFile.type,
-              size: optimizedFile.size,
-            },
-            ...extraContent,
+      if (file.type.startsWith('video/')) {
+        const tempId = `pending_video_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const previewUrl = URL.createObjectURL(file);
+        
+        const pendingMsg: Message = {
+          id: tempId,
+          sender: client.getUserId() || 'Me',
+          body: text.trim() || file.name || 'video.mp4',
+          timestamp: Date.now(),
+          isEncrypted: isDirect,
+          msgtype: MsgType.Video,
+          url: previewUrl,
+          info: {
+            mimetype: file.type || 'video/mp4',
+            size: file.size,
+            isPendingUpload: true,
+            uploadProgress: 5,
+          },
+          isDisappearing: isDisappearing,
+        };
+
+        setPendingUploads(prev => [...prev, pendingMsg]);
+        setTimeout(() => scrollToBottom('smooth'), 50);
+
+        let currentProgress = 5;
+        const progressTimer = setInterval(() => {
+          if (currentProgress < 85) {
+            currentProgress += Math.floor(Math.random() * 8) + 3;
+            if (currentProgress > 85) currentProgress = 85;
+            updatePendingProgress(tempId, currentProgress);
+          }
+        }, 300);
+
+        try {
+          const { videoFile, thumbnailFile, width, height, duration } = await processVideoForUpload(file);
+          
+          const thumbPreviewUrl = URL.createObjectURL(thumbnailFile);
+          setPendingUploads(prev => prev.map(m => m.id === tempId ? {
+            ...m,
+            info: { ...m.info, w: width, h: height, duration, thumbnail_url: thumbPreviewUrl }
+          } : m));
+
+          const thumbRes = await client.uploadContent(thumbnailFile);
+          const thumbMxcUrl = thumbRes.content_uri;
+
+          updatePendingProgress(tempId, 45);
+          currentProgress = 45;
+
+          const videoRes = await client.uploadContent(videoFile, {
+            progressHandler: (prog: any) => {
+              if (prog && prog.total > 0) {
+                const pct = 45 + Math.round((prog.loaded / prog.total) * 50);
+                currentProgress = Math.max(currentProgress, pct);
+                updatePendingProgress(tempId, currentProgress);
+              }
+            }
           } as any);
+          const videoMxcUrl = videoRes.content_uri;
+
+          updatePendingProgress(tempId, 98);
+
+          if (videoMxcUrl) {
+            await client.sendMessage(roomId, {
+              msgtype: MsgType.Video,
+              body: text.trim() || videoFile.name || 'video.mp4',
+              url: videoMxcUrl,
+              info: {
+                mimetype: videoFile.type || 'video/mp4',
+                size: videoFile.size,
+                w: width,
+                h: height,
+                duration: duration,
+                thumbnail_url: thumbMxcUrl,
+                thumbnail_info: {
+                  mimetype: 'image/jpeg',
+                  size: thumbnailFile.size,
+                  w: width,
+                  h: height,
+                },
+              },
+              ...extraContent,
+            } as any);
+          }
+
+          clearInterval(progressTimer);
+          updatePendingProgress(tempId, 100);
+          refreshMessages();
+
+          setTimeout(() => {
+            removePendingUpload(tempId);
+            URL.revokeObjectURL(previewUrl);
+            if (thumbPreviewUrl) URL.revokeObjectURL(thumbPreviewUrl);
+          }, 1000);
+
+        } catch (err: any) {
+          clearInterval(progressTimer);
+          console.error('Failed to upload video:', err);
+          updatePendingProgress(tempId, 0, true);
+          alert('동영상 업로드 실패: ' + (err.message || 'Unknown error'));
+          setTimeout(() => {
+            removePendingUpload(tempId);
+            URL.revokeObjectURL(previewUrl);
+          }, 4000);
         }
-      } catch (err: any) {
-        console.error('Failed to upload image:', err);
-        alert('Failed to upload image: ' + (err.message || 'Unknown error'));
+        return;
+      } else {
+        const tempId = `pending_img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const previewUrl = URL.createObjectURL(file);
+        
+        const pendingMsg: Message = {
+          id: tempId,
+          sender: client.getUserId() || 'Me',
+          body: text.trim() || file.name || 'image',
+          timestamp: Date.now(),
+          isEncrypted: isDirect,
+          msgtype: MsgType.Image,
+          url: previewUrl,
+          info: {
+            mimetype: file.type,
+            size: file.size,
+            isPendingUpload: true,
+            uploadProgress: 10,
+          },
+          isDisappearing: isDisappearing,
+        };
+
+        setPendingUploads(prev => [...prev, pendingMsg]);
+        setTimeout(() => scrollToBottom('smooth'), 50);
+
+        let currentProgress = 10;
+        const progressTimer = setInterval(() => {
+          if (currentProgress < 85) {
+            currentProgress += Math.floor(Math.random() * 12) + 5;
+            if (currentProgress > 85) currentProgress = 85;
+            updatePendingProgress(tempId, currentProgress);
+          }
+        }, 250);
+
+        try {
+          const optimizedFile = await optimizeImage(file, 1920, 0.85);
+          updatePendingProgress(tempId, 40);
+          currentProgress = 40;
+
+          const uploadRes = await client.uploadContent(optimizedFile, {
+            progressHandler: (prog: any) => {
+              if (prog && prog.total > 0) {
+                const pct = 40 + Math.round((prog.loaded / prog.total) * 55);
+                currentProgress = Math.max(currentProgress, pct);
+                updatePendingProgress(tempId, currentProgress);
+              }
+            }
+          } as any);
+          const mxcUrl = uploadRes.content_uri;
+
+          updatePendingProgress(tempId, 98);
+
+          if (mxcUrl) {
+            await client.sendMessage(roomId, {
+              msgtype: MsgType.Image,
+              body: text.trim() || optimizedFile.name || 'image',
+              url: mxcUrl,
+              info: {
+                mimetype: optimizedFile.type,
+                size: optimizedFile.size,
+              },
+              ...extraContent,
+            } as any);
+          }
+
+          clearInterval(progressTimer);
+          updatePendingProgress(tempId, 100);
+          refreshMessages();
+
+          setTimeout(() => {
+            removePendingUpload(tempId);
+            URL.revokeObjectURL(previewUrl);
+          }, 1000);
+        } catch (err: any) {
+          clearInterval(progressTimer);
+          console.error('Failed to upload image:', err);
+          updatePendingProgress(tempId, 0, true);
+          alert('이미지 업로드 실패: ' + (err.message || 'Unknown error'));
+          setTimeout(() => {
+            removePendingUpload(tempId);
+            URL.revokeObjectURL(previewUrl);
+          }, 4000);
+        }
+        return;
       }
     } else if (text.trim()) {
       try {
@@ -210,15 +405,34 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     }
   };
 
-  const handleContextMenu = (e: React.MouseEvent, msg: Message) => {
+  const handleContextMenu = (x: number, y: number, msg: Message) => {
     const isMe = msg.sender === client?.getUserId();
-    if (!isMe) return;
+    
+    // Adjust coordinates to prevent the menu from going off-screen
+    const menuWidth = 140; // approximate width of the context menu
+    const menuHeight = 120; // approximate height of the context menu
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    let adjustedX = x;
+    let adjustedY = y;
+
+    if (x + menuWidth > screenWidth) {
+      adjustedX = screenWidth - menuWidth - 8;
+    }
+    if (y + menuHeight > screenHeight) {
+      adjustedY = screenHeight - menuHeight - 8;
+    }
+    adjustedX = Math.max(8, adjustedX);
+    adjustedY = Math.max(8, adjustedY);
+
     setContextMenu({
-      x: e.pageX,
-      y: e.pageY,
+      x: adjustedX,
+      y: adjustedY,
       msgId: msg.id,
       isImage: msg.msgtype === 'm.image',
-      body: msg.body
+      body: msg.body,
+      isMe
     });
   };
 
@@ -233,7 +447,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         <MessageList
-          messages={messages}
+          messages={[...messages, ...pendingUploads]}
           room={room}
           isDirect={isDirect}
           onContextMenu={handleContextMenu}
@@ -281,22 +495,35 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
       {contextMenu && (
         <div
           style={{
-            position: 'absolute',
+            position: 'fixed',
             top: contextMenu.y,
             left: contextMenu.x,
             background: 'var(--color-bg-primary)',
             border: '1px solid var(--color-border-default)',
             boxShadow: 'var(--shadow-hardware-elevated)',
             borderRadius: '6px',
-            zIndex: 100,
+            zIndex: 1000,
             padding: '4px 0',
             minWidth: '130px',
             display: 'flex',
             flexDirection: 'column'
           }}
           onClick={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
         >
           {!contextMenu.isImage && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(contextMenu.body);
+                setContextMenu(null);
+              }}
+              className="pdf-nav-item"
+              style={{ padding: '8px 12px', border: 'none', background: 'transparent', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}
+            >
+              <Copy size={14} /> Copy Text
+            </button>
+          )}
+          {contextMenu.isMe && !contextMenu.isImage && (
             <button
               onClick={() => {
                 handleStartEdit(contextMenu.msgId, contextMenu.body);
@@ -321,18 +548,20 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
               <Download size={14} /> Download
             </button>
           )}
-          <button
-            onClick={() => {
-              if (confirm('Delete this message?')) {
-                handleDeleteMessage(contextMenu.msgId);
-              }
-              setContextMenu(null);
-            }}
-            className="pdf-nav-item"
-            style={{ padding: '8px 12px', border: 'none', background: 'transparent', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-functional-red)', cursor: 'pointer' }}
-          >
-            <Trash2 size={14} /> Delete
-          </button>
+          {contextMenu.isMe && (
+            <button
+              onClick={() => {
+                if (confirm('Delete this message?')) {
+                  handleDeleteMessage(contextMenu.msgId);
+                }
+                setContextMenu(null);
+              }}
+              className="pdf-nav-item"
+              style={{ padding: '8px 12px', border: 'none', background: 'transparent', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-functional-red)', cursor: 'pointer' }}
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       )}
     </div>

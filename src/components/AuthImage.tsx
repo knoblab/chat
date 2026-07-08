@@ -28,6 +28,13 @@ export const AuthImage: React.FC<AuthImageProps> = ({ mxcUrl, alt, style, classN
       setLoading(true);
       setError(false);
       
+      if (!mxcUrl.startsWith('mxc://')) {
+        setBlobUrl(mxcUrl);
+        setLoading(false);
+        setError(false);
+        return;
+      }
+
       const blob = await fetchMxcBlob(client, mxcUrl);
       if (cancelled) return;
 
