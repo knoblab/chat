@@ -10,6 +10,7 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { LinkPreview } from './LinkPreview';
 import { URL_REGEX } from '../../utils/urlPreview';
 import { renderSimpleMarkdown } from '../../utils/markdown';
+import DOMPurify from 'dompurify';
 
 export const isOnlyEmojis = (text: string): boolean => {
   if (!text) return false;
@@ -63,10 +64,11 @@ const renderMessageBody = (msg: Message, isMe: boolean, isBigEmoji = false) => {
   const hasHtml = msg.body ? /<[a-z][\s\S]*>/i.test(msg.body) : false;
 
   if (msg.formattedBody && hasHtml) {
+    const sanitizedHtml = DOMPurify.sanitize(msg.formattedBody);
     return (
       <div 
         className="pdf-formatted-body"
-        dangerouslySetInnerHTML={{ __html: msg.formattedBody }} 
+        dangerouslySetInnerHTML={{ __html: sanitizedHtml }} 
         style={{ wordBreak: 'break-word', display: 'flex', flexDirection: 'column', gap: '2px' }}
       />
     );
