@@ -54,6 +54,7 @@ export const useMessages = (roomId: string) => {
         let msgtype: string;
         let url: string;
         let info: any;
+        let formattedBody: string | undefined = undefined;
         let isEdited = false;
         let isDisappearing = false;
         let expiryTs: number | undefined = undefined;
@@ -75,6 +76,7 @@ export const useMessages = (roomId: string) => {
           msgtype = newContent.msgtype || 'm.text';
           url = newContent.url || '';
           info = newContent.info;
+          formattedBody = newContent.format === 'org.matrix.custom.html' ? newContent.formatted_body : undefined;
           isEdited = true;
           if (newContent.org_qpi_disappearing || newContent.expiry_ts) {
             isDisappearing = true;
@@ -85,6 +87,7 @@ export const useMessages = (roomId: string) => {
           msgtype = c.msgtype || 'm.text';
           url = c.url || '';
           info = c.info;
+          formattedBody = c.format === 'org.matrix.custom.html' ? c.formatted_body : undefined;
         }
 
         const isReadByOther = (otherMember && typeof currentRoom.hasUserReadEvent === 'function')
@@ -104,6 +107,7 @@ export const useMessages = (roomId: string) => {
           isReadByOther,
           isDisappearing,
           expiryTs,
+          formattedBody,
         };
       });
 

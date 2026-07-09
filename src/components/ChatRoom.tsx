@@ -559,12 +559,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     } else if (text.trim()) {
       try {
         const cleanText = text.trim();
+        const hasHtml = /<[a-z][\s\S]*>/i.test(cleanText);
         const isMd = hasMarkdown(cleanText);
+        const isRich = hasHtml || isMd;
+        const formattedHtml = hasHtml ? cleanText : markdownToHtml(cleanText);
+
         await client.sendMessage(roomId, {
           msgtype: MsgType.Text,
           body: cleanText,
-          format: isMd ? 'org.matrix.custom.html' : undefined,
-          formatted_body: isMd ? markdownToHtml(cleanText) : undefined,
+          format: isRich ? 'org.matrix.custom.html' : undefined,
+          formatted_body: isRich ? formattedHtml : undefined,
           ...extraContent,
         } as any);
       } catch (err: any) {
@@ -601,17 +605,21 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     handleCancelEdit();
 
     try {
+      const hasHtml = /<[a-z][\s\S]*>/i.test(text);
       const isMd = hasMarkdown(text);
+      const isRich = hasHtml || isMd;
+      const formattedHtml = hasHtml ? text : markdownToHtml(text);
+
       await client.sendMessage(roomId, {
         msgtype: MsgType.Text,
         body: `* ${text}`,
-        format: isMd ? 'org.matrix.custom.html' : undefined,
-        formatted_body: isMd ? `* ${markdownToHtml(text)}` : undefined,
+        format: isRich ? 'org.matrix.custom.html' : undefined,
+        formatted_body: isRich ? `* ${formattedHtml}` : undefined,
         'm.new_content': {
           msgtype: MsgType.Text,
           body: text,
-          format: isMd ? 'org.matrix.custom.html' : undefined,
-          formatted_body: isMd ? markdownToHtml(text) : undefined,
+          format: isRich ? 'org.matrix.custom.html' : undefined,
+          formatted_body: isRich ? formattedHtml : undefined,
         },
         'm.relates_to': {
           rel_type: 'm.replace' as any,

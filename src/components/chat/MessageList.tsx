@@ -43,8 +43,8 @@ export const isOnlyEmojis = (text: string): boolean => {
   return stripped.length === 0 && emojiMatches.length >= 1 && emojiMatches.length <= 4;
 };
 
-const renderMessageBody = (body: string, isMe: boolean, isBigEmoji = false) => {
-  if (!body) return null;
+const renderMessageBody = (msg: Message, isMe: boolean, isBigEmoji = false) => {
+  if (!msg) return null;
 
   if (isBigEmoji) {
     return (
@@ -55,12 +55,22 @@ const renderMessageBody = (body: string, isMe: boolean, isBigEmoji = false) => {
         display: 'inline-block',
         padding: '2px 0'
       }}>
-        {body}
+        {msg.body}
       </span>
     );
   }
 
-  return renderSimpleMarkdown(body, isMe);
+  if (msg.formattedBody) {
+    return (
+      <div 
+        className="pdf-formatted-body"
+        dangerouslySetInnerHTML={{ __html: msg.formattedBody }} 
+        style={{ wordBreak: 'break-word', display: 'flex', flexDirection: 'column', gap: '2px' }}
+      />
+    );
+  }
+
+  return renderSimpleMarkdown(msg.body || '', isMe);
 };
 
 
@@ -555,7 +565,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     ) : (
                       <div className="pdf-flex-col" style={{ gap: '4px' }}>
-                        {renderMessageBody(msg.body || '', isMe, isOnlyEmojiMsg)}
+                        {renderMessageBody(msg, isMe, isOnlyEmojiMsg)}
                         {(() => {
                           const urls = msg.body ? [...msg.body.matchAll(URL_REGEX)].map(m => m[0]) : [];
                           if (urls.length > 0) {

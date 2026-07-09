@@ -11,6 +11,7 @@ export interface Message {
   isReadByOther?: boolean;
   isDisappearing?: boolean;
   expiryTs?: number;
+  formattedBody?: string;
 }
 
 export interface UserSearchResult {
