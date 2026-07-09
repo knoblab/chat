@@ -312,6 +312,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                               gridTemplateColumns: msg.info.images.length === 3 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', 
                               gap: '4px',
                               width: '100%',
+                              maxWidth: '320px',
                               borderRadius: '6px',
                               overflow: 'hidden'
                             }}

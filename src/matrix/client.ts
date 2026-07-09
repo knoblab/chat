@@ -139,7 +139,10 @@ export const initMatrixClient = async (
   }
 
   // Start syncing with larger limit for history
-  await matrixClient.startClient({ initialSyncLimit: 30 });
+  await matrixClient.startClient({ 
+    initialSyncLimit: 30,
+    pendingEventOrdering: 'detached' as any,
+  });
 
   return new Promise<MatrixClient>((resolve, reject) => {
     // Timeout of 15 seconds to prevent hanging the UI on sync failure
