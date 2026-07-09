@@ -123,7 +123,7 @@ const renderHtmlTag = (tag: string) => {
   );
 };
 
-const CodeBlock: React.FC<{ code: string; language?: string; isMe: boolean }> = ({ code, language, isMe }) => {
+const CodeBlock: React.FC<{ code: string; language?: string }> = ({ code, language }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -379,7 +379,6 @@ export const renderSimpleMarkdown = (text: string, isMe: boolean): React.ReactNo
             key={`cb-${codeBlockIndex++}`}
             code={codeBlockLines.join('\n')}
             language={currentLanguage}
-            isMe={isMe}
           />
         );
         codeBlockLines = [];
@@ -534,7 +533,6 @@ export const renderSimpleMarkdown = (text: string, isMe: boolean): React.ReactNo
         key={`cb-${codeBlockIndex}`}
         code={codeBlockLines.join('\n')}
         language={currentLanguage}
-        isMe={isMe}
       />
     );
   }

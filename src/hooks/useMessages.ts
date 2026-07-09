@@ -180,7 +180,7 @@ export const useMessages = (roomId: string) => {
     try {
       setLoadingOlder(true);
       const timeline = room.getLiveTimeline();
-      await client.paginateEventTimeline(timeline, { back: true, limit: 30 });
+      await client.paginateEventTimeline(timeline, { backwards: true, limit: 30 });
       updateMessages();
     } catch (err) {
       console.warn('Failed to load older messages:', err);
