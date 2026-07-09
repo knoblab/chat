@@ -90,7 +90,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     if (!client || !room || !roomId || isDirect) return;
     try {
       const joinRule = room.currentState.getStateEvents('m.room.join_rules' as any, '')?.getContent()?.join_rule;
-      if (joinRule !== 'public') {
+      if (!joinRule) {
         client.sendStateEvent(roomId, 'm.room.join_rules' as any, { join_rule: 'public' }, '').catch(() => {});
       }
       const historyVis = room.currentState.getStateEvents('m.room.history_visibility' as any, '')?.getContent()?.history_visibility;

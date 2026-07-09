@@ -10,8 +10,54 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { LinkPreview } from './LinkPreview';
 import { URL_REGEX } from '../../utils/urlPreview';
 
-const renderMessageBody = (body: string, isMe: boolean) => {
+export const isOnlyEmojis = (text: string): boolean => {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    try {
+      const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+      const segments = Array.from(segmenter.segment(trimmed)).map(s => s.segment.trim()).filter(Boolean);
+      if (segments.length === 0 || segments.length > 4) return false;
+
+      const emojiRegex = /^([\uFE0F\u200D]|\p{Emoji_Presentation}|\p{Extended_Pictographic}|\p{Regional_Indicator}|[0-9#*]\uFE0F?\u20E3)+$/u;
+      const lettersDigitsRegex = /^[a-zA-Z0-9\s.,!?"'(){}[\]<>@#$%^&*-=_+`~;:/\\|]+$/;
+      
+      return segments.every(seg => {
+        if (lettersDigitsRegex.test(seg) && !seg.includes('\u20E3')) return false;
+        return emojiRegex.test(seg.replace(/[\uFE0F\u200D\p{Emoji_Modifier}]/gu, ''));
+      });
+    } catch (_e) {}
+  }
+
+  const clean = trimmed.replace(/\s+/g, '');
+  const asciiCheck = /[a-zA-Z0-9.,!?"'(){}[\]<>@#$%^&*-=_+`~;:/\\|]/;
+  if (asciiCheck.test(clean.replace(/[0-9#*]\uFE0F?\u20E3/gu, ''))) return false;
+
+  const emojiMatches = clean.match(/([\uFE0F\u200D]|\p{Emoji_Presentation}|\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)/gu);
+  if (!emojiMatches) return false;
+  
+  const stripped = clean.replace(/([\uFE0F\u200D]|\p{Emoji_Presentation}|\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|[0-9#*]\u20E3)/gu, '');
+  return stripped.length === 0 && emojiMatches.length >= 1 && emojiMatches.length <= 4;
+};
+
+const renderMessageBody = (body: string, isMe: boolean, isBigEmoji = false) => {
   if (!body) return null;
+
+  if (isBigEmoji) {
+    return (
+      <span style={{
+        fontSize: '48px',
+        lineHeight: 1.25,
+        letterSpacing: '2px',
+        display: 'inline-block',
+        padding: '2px 0'
+      }}>
+        {body}
+      </span>
+    );
+  }
 
   const matches = [...body.matchAll(URL_REGEX)];
   if (matches.length === 0) {
@@ -113,6 +159,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             const showTime = !isSameSenderAsNext || !isSameMinuteAsNext;
             const formattedTime = currDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const marginTop = idx === 0 ? 0 : (isFirstInGroup ? 'var(--space-150)' : 'var(--space-025)');
+            const isOnlyEmojiMsg = isOnlyEmojis(msg.body || '') && !msg.url && msg.msgtype !== 'm.image' && msg.msgtype !== 'm.video' && msg.msgtype !== 'm.file' && !msg.isDisappearing;
 
             return (
               <div key={msg.id} className="animate-message" style={{
@@ -201,18 +248,26 @@ export const MessageList: React.FC<MessageListProps> = ({
                       }
                     }}
                     style={{
-                      background: msg.isDisappearing 
-                        ? (isMe ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.15)')
-                        : (isMe ? 'var(--color-functional-red)' : 'var(--color-bg-secondary)'),
+                      background: isOnlyEmojiMsg
+                        ? 'transparent'
+                        : (msg.isDisappearing 
+                          ? (isMe ? 'var(--color-disappearing-bg-me)' : 'var(--color-disappearing-bg-other)')
+                          : (isMe ? 'var(--color-functional-red)' : 'var(--color-bg-secondary)')),
                       color: msg.isDisappearing
-                        ? (isMe ? '#fff' : '#f59e0b')
+                        ? (isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)')
                         : (isMe ? 'var(--color-bg-primary)' : 'var(--color-text-primary)'),
-                      border: msg.isDisappearing ? '1px dashed #f59e0b' : '1px solid ' + (isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)'),
-                      padding: (msg.msgtype === 'm.image' || msg.msgtype === 'm.video') ? 'var(--space-050)' : 'var(--space-100) var(--space-150)',
+                      border: isOnlyEmojiMsg
+                        ? 'none'
+                        : (msg.isDisappearing 
+                          ? (isMe ? '1px dashed var(--color-disappearing-border-me)' : '1px dashed var(--color-disappearing-border-other)')
+                          : '1px solid ' + (isMe ? 'var(--color-functional-red)' : 'var(--color-border-default)')),
+                      padding: isOnlyEmojiMsg
+                        ? '2px 0'
+                        : ((msg.msgtype === 'm.image' || msg.msgtype === 'm.video') ? 'var(--space-050)' : 'var(--space-100) var(--space-150)'),
                       borderRadius: isMe 
                         ? (isFirstInGroup ? '12px 12px 2px 12px' : '12px 2px 2px 12px') 
                         : (isFirstInGroup ? '12px 12px 12px 2px' : '2px 12px 12px 2px'),
-                      boxShadow: isMe ? 'none' : 'var(--shadow-hardware-bevel)',
+                      boxShadow: (isMe || isOnlyEmojiMsg) ? 'none' : 'var(--shadow-hardware-bevel)',
                       marginBottom: 0,
                       maxWidth: '100%',
                       display: 'flex',
@@ -269,13 +324,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                         )}
                         <div className="pdf-text-copy-13-mono pdf-mt-100 pdf-flex-row pdf-items-center pdf-justify-between" style={{ 
                           fontSize: '11px', 
-                          color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)',
+                          color: msg.isDisappearing 
+                            ? (isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)') 
+                            : (isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'),
                           padding: '4px var(--space-050) var(--space-050) var(--space-050)' 
                         }}>
                           <span>{msg.body} {msg.info?.size ? `(${(msg.info.size / (1024 * 1024)).toFixed(1)}MB)` : ''}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             {msg.isDisappearing && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b', fontSize: '10px', fontWeight: 'bold' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)', fontSize: '10px', fontWeight: 'bold' }}>
                                 <Timer size={11} /> 1h
                               </span>
                             )}
@@ -336,13 +393,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                         )}
                         <div className="pdf-text-copy-13-mono pdf-mt-100 pdf-flex-row pdf-items-center pdf-justify-between" style={{ 
                           fontSize: '11px', 
-                          color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)',
+                          color: msg.isDisappearing 
+                            ? (isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)') 
+                            : (isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'),
                           padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
                         }}>
                           <span>{msg.body}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             {msg.isDisappearing && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b', fontSize: '10px', fontWeight: 'bold' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)', fontSize: '10px', fontWeight: 'bold' }}>
                                 <Timer size={11} /> 1h
                               </span>
                             )}
@@ -355,7 +414,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     ) : (
                       <div className="pdf-flex-col" style={{ gap: '4px' }}>
-                        {renderMessageBody(msg.body || '', isMe)}
+                        {renderMessageBody(msg.body || '', isMe, isOnlyEmojiMsg)}
                         {(() => {
                           const urls = msg.body ? [...msg.body.matchAll(URL_REGEX)].map(m => m[0]) : [];
                           if (urls.length > 0) {
@@ -366,16 +425,18 @@ export const MessageList: React.FC<MessageListProps> = ({
                         {(showTime || msg.isEdited || (isMe && isDirect) || msg.isDisappearing) && (
                           <div style={{ 
                             fontSize: '10px', 
-                            alignSelf: 'flex-end',
-                            marginTop: '4px',
+                            alignSelf: isOnlyEmojiMsg ? (isMe ? 'flex-end' : 'flex-start') : 'flex-end',
+                            marginTop: isOnlyEmojiMsg ? '0px' : '4px',
                             opacity: 0.8,
-                            color: msg.isDisappearing ? '#f59e0b' : (isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'),
+                            color: msg.isDisappearing 
+                              ? (isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)') 
+                              : (isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'),
                             display: 'flex',
                             alignItems: 'center',
                             gap: '6px'
                           }}>
                             {msg.isDisappearing && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b', fontSize: '10px', fontWeight: 'bold' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)', fontSize: '10px', fontWeight: 'bold' }}>
                                 <Timer size={11} /> 1h
                               </span>
                             )}

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useMatrix } from '../matrix/MatrixProvider';
 import { useUIStore } from '../stores/useUIStore';
 import { useChatStore } from '../stores/useChatStore';
 import { useNotifications } from '../hooks/useNotifications';
@@ -11,11 +10,10 @@ import { Sidebar } from '../components/dashboard/Sidebar';
 import { MobileNav } from '../components/dashboard/MobileNav';
 import { SettingsPanel } from '../components/dashboard/SettingsPanel';
 import { E2EEInfoButton } from '../components/E2EEInfo';
-import { Preset } from 'matrix-js-sdk';
+import { CreateRoomModal } from '../components/chat/CreateRoomModal';
 import { Plus, Sun, Moon, X, Sparkles, UserPlus, ShieldCheck } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { client } = useMatrix();
   const navigate = useNavigate();
   const location = useLocation();
   const { mobileTab, setMobileTab, theme, toggleTheme } = useUIStore();
@@ -24,9 +22,7 @@ export const Dashboard: React.FC = () => {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [newRoomName, setNewRoomName] = useState('');
-  const [newRoomUser, setNewRoomUser] = useState('');
-  const [creatingRoom, setCreatingRoom] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -48,43 +44,6 @@ export const Dashboard: React.FC = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location.state, selectRoom]);
-
-  const handleCreateRoom = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!client) return;
-
-    try {
-      setCreatingRoom(true);
-      const name = newRoomName.trim() || `암호화 대화방 (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
-      const inviteList = newRoomUser.trim() ? [newRoomUser.trim()] : [];
-
-      const res = await client.createRoom({
-        name,
-        preset: inviteList.length > 0 ? Preset.TrustedPrivateChat : Preset.PrivateChat,
-        invite: inviteList,
-        initial_state: [
-          {
-            type: 'm.room.encryption',
-            state_key: '',
-            content: {
-              algorithm: 'm.megolm.v1.aes-sha2',
-            },
-          },
-        ],
-      });
-
-      selectRoom(res.room_id);
-      setNewRoomName('');
-      setNewRoomUser('');
-      setIsProfileOpen(false);
-      setMobileTab('chats');
-    } catch (err) {
-      console.error('Failed to create room:', err);
-      alert('방 생성에 실패했습니다. 유효한 Matrix User ID(@user:domain)인지 확인해주세요.');
-    } finally {
-      setCreatingRoom(false);
-    }
-  };
 
   if (isMobile) {
     if (selectedRoomId) {
@@ -118,13 +77,12 @@ export const Dashboard: React.FC = () => {
           <div className="pdf-flex-row pdf-items-center" style={{ gap: '8px' }}>
             {mobileTab === 'chats' && (
               <button
-                onClick={() => handleCreateRoom()}
-                disabled={creatingRoom}
+                onClick={() => setIsCreateModalOpen(true)}
                 className="pdf-btn-primary pdf-btn-xs"
-                style={{ height: '32px', padding: '0 10px', borderRadius: '16px', fontSize: '12px', gap: '4px', background: 'var(--color-functional-red)', opacity: creatingRoom ? 0.6 : 1 }}
+                style={{ height: '32px', padding: '0 10px', borderRadius: '16px', fontSize: '12px', gap: '4px', background: 'var(--color-functional-red)' }}
                 title="새 채팅방 생성"
               >
-                <Plus size={14} /> {creatingRoom ? '생성 중...' : '새 채팅'}
+                <Plus size={14} /> 새 채팅
               </button>
             )}
             {mobileTab === 'friends' && (
@@ -167,7 +125,7 @@ export const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <button
-                  onClick={handleCreateRoom}
+                  onClick={() => setIsCreateModalOpen(true)}
                   className="pdf-btn-primary"
                   style={{ height: '32px', padding: '0 12px', borderRadius: '16px', fontSize: '12px', fontWeight: 600, gap: '4px', flexShrink: 0 }}
                 >
@@ -248,6 +206,8 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      <CreateRoomModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
     </div>
   );
 };

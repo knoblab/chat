@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useMatrix } from '../../matrix/MatrixProvider';
 import { useUIStore } from '../../stores/useUIStore';
 import { useChatStore } from '../../stores/useChatStore';
 import { RoomList } from '../RoomList';
 import { FriendList } from '../FriendList';
 import { E2EEInfoButton } from '../E2EEInfo';
-import { Preset } from 'matrix-js-sdk';
+import { CreateRoomModal } from '../chat/CreateRoomModal';
 import { Settings, Sun, Moon, LogOut, MessageSquare, Users, Plus, Sparkles } from 'lucide-react';
 
 interface SidebarProps {
@@ -13,49 +13,10 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onOpenProfile }) => {
-  const { client, logout } = useMatrix();
+  const { logout } = useMatrix();
   const { activeTab, setActiveTab, theme, toggleTheme } = useUIStore();
   const { selectedRoomId, selectRoom } = useChatStore();
-
-  const handleCreateRoom = async () => {
-    if (!client) return;
-    const name = prompt('Enter a name for the new room:');
-    if (!name || !name.trim()) return;
-
-    try {
-      const res = await client.createRoom({
-        name: name.trim(),
-        preset: Preset.PublicChat,
-        visibility: 'private' as any,
-        initial_state: [
-          {
-            type: 'm.room.encryption',
-            state_key: '',
-            content: {
-              algorithm: 'm.megolm.v1.aes-sha2',
-            },
-          },
-          {
-            type: 'm.room.join_rules',
-            state_key: '',
-            content: { join_rule: 'public' },
-          },
-          {
-            type: 'm.room.history_visibility',
-            state_key: '',
-            content: { history_visibility: 'shared' },
-          },
-        ],
-      });
-
-      if (res.room_id) {
-        selectRoom(res.room_id);
-      }
-    } catch (err: any) {
-      console.error('Failed to create room:', err);
-      alert('Failed to create room: ' + (err.message || 'Unknown error'));
-    }
-  };
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   return (
     <aside className="pdf-sidebar">
@@ -176,11 +137,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenProfile }) => {
       {/* Action Button at bottom */}
       {activeTab === 'chats' && (
         <div style={{ padding: 'var(--space-150)', borderTop: '1px solid var(--color-border-default)' }}>
-          <button onClick={handleCreateRoom} className="pdf-btn-primary pdf-btn-sm pdf-w-full">
-            <Plus size={16} /> New Encrypted Room
+          <button onClick={() => setIsCreateModalOpen(true)} className="pdf-btn-primary pdf-btn-sm pdf-w-full">
+            <Plus size={16} /> New Chat Room
           </button>
         </div>
       )}
+
+      <CreateRoomModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
     </aside>
   );
 };

@@ -162,7 +162,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       )}
 
       {isDisappearing && !editingMessageId && (
-        <div className="pdf-flex-row pdf-items-center" style={{ background: 'rgba(245, 158, 11, 0.15)', borderBottom: '1px solid #f59e0b', padding: '6px 14px', gap: '6px', color: '#f59e0b', fontSize: '11px', fontWeight: 600 }}>
+        <div className="pdf-flex-row pdf-items-center" style={{ background: 'var(--color-disappearing-banner-bg)', borderBottom: '1px solid var(--color-disappearing-banner-border)', padding: '6px 14px', gap: '6px', color: 'var(--color-disappearing-banner-text)', fontSize: '11px', fontWeight: 600 }}>
           <Timer size={14} />
           <span>⏱️ 1시간 자동 삭제 모드 ON (전송된 메시지는 1시간 후 사라집니다)</span>
         </div>
@@ -238,9 +238,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               className="pdf-secondary-btn"
               style={{ 
                 width: isMobile ? '40px' : '42px', height: isMobile ? '40px' : '42px', padding: 0, justifyContent: 'center', flexShrink: 0, borderRadius: '20px',
-                background: isDisappearing ? 'rgba(245, 158, 11, 0.2)' : 'var(--color-bg-secondary)',
-                border: isDisappearing ? '1px solid #f59e0b' : 'none',
-                color: isDisappearing ? '#f59e0b' : 'var(--color-text-primary)'
+                background: isDisappearing ? 'var(--color-disappearing-btn-bg)' : 'var(--color-bg-secondary)',
+                border: isDisappearing ? '1px solid var(--color-disappearing-btn-border)' : 'none',
+                color: isDisappearing ? 'var(--color-disappearing-btn-text)' : 'var(--color-text-primary)'
               }}
               title="1시간 자동 삭제 토글"
             >
