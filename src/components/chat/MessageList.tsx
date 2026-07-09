@@ -5,10 +5,11 @@ import { AuthImage } from '../AuthImage';
 import { AuthVideo } from '../AuthVideo';
 import { downloadMxcMedia } from '../../utils/media';
 import type { Message } from '../../types';
-import { Download, Timer } from 'lucide-react';
+import { Download, Timer, FileText } from 'lucide-react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { LinkPreview } from './LinkPreview';
 import { URL_REGEX } from '../../utils/urlPreview';
+import { renderSimpleMarkdown } from '../../utils/markdown';
 
 export const isOnlyEmojis = (text: string): boolean => {
   if (!text) return false;
@@ -59,48 +60,7 @@ const renderMessageBody = (body: string, isMe: boolean, isBigEmoji = false) => {
     );
   }
 
-  const matches = [...body.matchAll(URL_REGEX)];
-  if (matches.length === 0) {
-    return <span>{body}</span>;
-  }
-
-  const elements: React.ReactNode[] = [];
-  let lastIndex = 0;
-
-  matches.forEach((match, idx) => {
-    const url = match[0];
-    const matchIndex = match.index!;
-
-    if (matchIndex > lastIndex) {
-      elements.push(body.substring(lastIndex, matchIndex));
-    }
-
-    elements.push(
-      <a
-        key={`link-${idx}`}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          color: isMe ? '#ffffff' : 'var(--color-functional-red)',
-          textDecoration: 'underline',
-          wordBreak: 'break-all',
-          fontWeight: 600
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {url}
-      </a>
-    );
-
-    lastIndex = matchIndex + url.length;
-  });
-
-  if (lastIndex < body.length) {
-    elements.push(body.substring(lastIndex));
-  }
-
-  return <span>{elements}</span>;
+  return renderSimpleMarkdown(body, isMe);
 };
 
 
@@ -399,6 +359,120 @@ export const MessageList: React.FC<MessageListProps> = ({
                           padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
                         }}>
                           <span>{msg.body}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {msg.isDisappearing && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)', fontSize: '10px', fontWeight: 'bold' }}>
+                                <Timer size={11} /> 1h
+                              </span>
+                            )}
+                            {isMe && isDirect && !msg.isReadByOther && !msg.info?.isPendingUpload && (
+                              <span style={{ color: '#ffc107', fontWeight: 'bold', fontSize: '10px' }}>1</span>
+                            )}
+                            {showTime && <span>{formattedTime}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ) : msg.msgtype === 'm.file' && msg.url ? (
+                      <div style={{ position: 'relative' }}>
+                        <div 
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '10px 12px',
+                            background: isMe ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.03)',
+                            borderRadius: '8px',
+                            border: '1px solid ' + (isMe ? 'rgba(255, 255, 255, 0.2)' : 'var(--color-border-default)'),
+                          }}
+                        >
+                          <div 
+                            style={{ 
+                              width: '40px', 
+                              height: '40px', 
+                              borderRadius: '8px', 
+                              background: isMe ? 'rgba(255,255,255,0.15)' : 'var(--color-bg-secondary)', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}
+                          >
+                            <FileText size={20} color={isMe ? '#fff' : 'var(--color-text-primary)'} />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                            <span 
+                              style={{ 
+                                fontSize: '13px', 
+                                fontWeight: 600, 
+                                color: isMe ? '#fff' : 'var(--color-text-primary)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '100%'
+                              }}
+                              title={msg.body}
+                            >
+                              {msg.body}
+                            </span>
+                            <span style={{ fontSize: '11px', color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)' }}>
+                              {msg.info?.size ? `${(msg.info.size / (1024 * 1024)).toFixed(2)} MB` : 'Size unknown'}
+                            </span>
+                          </div>
+                          {!msg.info?.isPendingUpload && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadMxcMedia(client, msg.url!, msg.body || 'file');
+                              }}
+                              style={{
+                                background: 'transparent', 
+                                border: 'none', 
+                                color: isMe ? '#fff' : 'var(--color-text-primary)',
+                                cursor: 'pointer', 
+                                display: 'flex', 
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '8px',
+                                borderRadius: '50%',
+                                transition: 'background 0.2s',
+                              }}
+                              onMouseOver={(e) => e.currentTarget.style.background = isMe ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+                              onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                              title="파일 다운로드"
+                            >
+                              <Download size={18} />
+                            </button>
+                          )}
+                        </div>
+                        {msg.info?.isPendingUpload && (
+                          <div style={{
+                            width: '100%', background: 'rgba(0,0,0,0.75)', padding: '8px 12px',
+                            borderRadius: '6px', marginTop: '6px', border: '1px solid rgba(255,255,255,0.15)'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#fff', marginBottom: '4px', fontWeight: 600 }}>
+                              <span>{msg.info?.uploadError ? '❌ 업로드 실패' : '📂 파일 업로드 중...'}</span>
+                              <span>{msg.info?.uploadProgress || 0}%</span>
+                            </div>
+                            {!msg.info?.uploadError && (
+                              <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.2)', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{
+                                  width: `${msg.info?.uploadProgress || 0}%`,
+                                  height: '100%',
+                                  background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                                  transition: 'width 0.3s ease'
+                                }} />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="pdf-text-copy-13-mono pdf-mt-050 pdf-flex-row pdf-items-center pdf-justify-between" style={{ 
+                          fontSize: '11px', 
+                          color: msg.isDisappearing 
+                            ? (isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)') 
+                            : (isMe ? 'rgba(255,255,255,0.7)' : 'var(--color-text-secondary)'),
+                          padding: '0 var(--space-050) var(--space-050) var(--space-050)' 
+                        }}>
+                          <div />
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             {msg.isDisappearing && (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: isMe ? 'var(--color-disappearing-text-me)' : 'var(--color-disappearing-text-other)', fontSize: '10px', fontWeight: 'bold' }}>

@@ -13,6 +13,7 @@ import { Edit2, Trash2, Download, ArrowDown, Copy } from 'lucide-react';
 import { downloadMxcMedia } from '../utils/media';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { processVideoForUpload } from '../utils/videoOptimizer';
+import { hasMarkdown, markdownToHtml } from '../utils/markdown';
 import type { VirtuosoHandle } from 'react-virtuoso';
 
 interface ChatRoomProps {
@@ -133,7 +134,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     };
   }, [client, roomId, room, refreshMessages, scrollToBottom, isAtBottom]);
 
-  const handleSend = async (text: string, file?: File) => {
+  const handleSend = async (text: string, files?: File[]) => {
     if (!client) return;
 
     if (client.isRoomEncrypted(roomId)) {
@@ -155,201 +156,293 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
       expiry_ts: Date.now() + 60 * 60 * 1000,
     } : {};
 
-    if (file) {
-      if (file.type.startsWith('video/')) {
-        const tempId = `pending_video_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const previewUrl = URL.createObjectURL(file);
-        
-        const pendingMsg: Message = {
-          id: tempId,
-          sender: client.getUserId() || 'Me',
-          body: text.trim() || file.name || 'video.mp4',
-          timestamp: Date.now(),
-          isEncrypted: isDirect,
-          msgtype: MsgType.Video,
-          url: previewUrl,
-          info: {
-            mimetype: file.type || 'video/mp4',
-            size: file.size,
-            isPendingUpload: true,
-            uploadProgress: 5,
-          },
-          isDisappearing: isDisappearing,
-        };
+    if (files && files.length > 0) {
+      const uploadSingleFile = async (file: File, fileText: string) => {
+        const isVideo = file.type.startsWith('video/');
+        const isImage = file.type.startsWith('image/');
 
-        setPendingUploads(prev => [...prev, pendingMsg]);
-        setTimeout(() => scrollToBottom('smooth'), 50);
-
-        let currentProgress = 5;
-        const progressTimer = setInterval(() => {
-          if (currentProgress < 85) {
-            currentProgress += Math.floor(Math.random() * 8) + 3;
-            if (currentProgress > 85) currentProgress = 85;
-            updatePendingProgress(tempId, currentProgress);
-          }
-        }, 300);
-
-        try {
-          const { videoFile, thumbnailFile, width, height, duration } = await processVideoForUpload(file);
+        if (isVideo) {
+          const tempId = `pending_video_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          const previewUrl = URL.createObjectURL(file);
           
-          const thumbPreviewUrl = URL.createObjectURL(thumbnailFile);
-          setPendingUploads(prev => prev.map(m => m.id === tempId ? {
-            ...m,
-            info: { ...m.info, w: width, h: height, duration, thumbnail_url: thumbPreviewUrl }
-          } : m));
+          const pendingMsg: Message = {
+            id: tempId,
+            sender: client.getUserId() || 'Me',
+            body: fileText.trim() || file.name || 'video.mp4',
+            timestamp: Date.now(),
+            isEncrypted: isDirect,
+            msgtype: MsgType.Video,
+            url: previewUrl,
+            info: {
+              mimetype: file.type || 'video/mp4',
+              size: file.size,
+              isPendingUpload: true,
+              uploadProgress: 5,
+            },
+            isDisappearing: isDisappearing,
+          };
 
-          const thumbRes = await client.uploadContent(thumbnailFile);
-          const thumbMxcUrl = thumbRes.content_uri;
+          setPendingUploads(prev => [...prev, pendingMsg]);
+          setTimeout(() => scrollToBottom('smooth'), 50);
 
-          updatePendingProgress(tempId, 45);
-          currentProgress = 45;
-
-          const videoRes = await client.uploadContent(videoFile, {
-            progressHandler: (prog: any) => {
-              if (prog && prog.total > 0) {
-                const pct = 45 + Math.round((prog.loaded / prog.total) * 50);
-                currentProgress = Math.max(currentProgress, pct);
-                updatePendingProgress(tempId, currentProgress);
-              }
+          let currentProgress = 5;
+          const progressTimer = setInterval(() => {
+            if (currentProgress < 85) {
+              currentProgress += Math.floor(Math.random() * 8) + 3;
+              if (currentProgress > 85) currentProgress = 85;
+              updatePendingProgress(tempId, currentProgress);
             }
-          } as any);
-          const videoMxcUrl = videoRes.content_uri;
+          }, 300);
 
-          updatePendingProgress(tempId, 98);
+          try {
+            const { videoFile, thumbnailFile, width, height, duration } = await processVideoForUpload(file);
+            
+            const thumbPreviewUrl = URL.createObjectURL(thumbnailFile);
+            setPendingUploads(prev => prev.map(m => m.id === tempId ? {
+              ...m,
+              info: { ...m.info, w: width, h: height, duration, thumbnail_url: thumbPreviewUrl }
+            } : m));
 
-          if (videoMxcUrl) {
-            await client.sendMessage(roomId, {
-              msgtype: MsgType.Video,
-              body: text.trim() || videoFile.name || 'video.mp4',
-              url: videoMxcUrl,
-              info: {
-                mimetype: videoFile.type || 'video/mp4',
-                size: videoFile.size,
-                w: width,
-                h: height,
-                duration: duration,
-                thumbnail_url: thumbMxcUrl,
-                thumbnail_info: {
-                  mimetype: 'image/jpeg',
-                  size: thumbnailFile.size,
+            const thumbRes = await client.uploadContent(thumbnailFile);
+            const thumbMxcUrl = thumbRes.content_uri;
+
+            updatePendingProgress(tempId, 45);
+            currentProgress = 45;
+
+            const videoRes = await client.uploadContent(videoFile, {
+              progressHandler: (prog: any) => {
+                if (prog && prog.total > 0) {
+                  const pct = 45 + Math.round((prog.loaded / prog.total) * 50);
+                  currentProgress = Math.max(currentProgress, pct);
+                  updatePendingProgress(tempId, currentProgress);
+                }
+              }
+            } as any);
+            const videoMxcUrl = videoRes.content_uri;
+
+            updatePendingProgress(tempId, 98);
+
+            if (videoMxcUrl) {
+              await client.sendMessage(roomId, {
+                msgtype: MsgType.Video,
+                body: fileText.trim() || videoFile.name || 'video.mp4',
+                url: videoMxcUrl,
+                info: {
+                  mimetype: videoFile.type || 'video/mp4',
+                  size: videoFile.size,
                   w: width,
                   h: height,
+                  duration: duration,
+                  thumbnail_url: thumbMxcUrl,
+                  thumbnail_info: {
+                    mimetype: 'image/jpeg',
+                    size: thumbnailFile.size,
+                    w: width,
+                    h: height,
+                  },
                 },
-              },
-              ...extraContent,
-            } as any);
-          }
-
-          clearInterval(progressTimer);
-          updatePendingProgress(tempId, 100);
-          refreshMessages();
-
-          setTimeout(() => {
-            removePendingUpload(tempId);
-            URL.revokeObjectURL(previewUrl);
-            if (thumbPreviewUrl) URL.revokeObjectURL(thumbPreviewUrl);
-          }, 1000);
-
-        } catch (err: any) {
-          clearInterval(progressTimer);
-          console.error('Failed to upload video:', err);
-          updatePendingProgress(tempId, 0, true);
-          alert('동영상 업로드 실패: ' + (err.message || 'Unknown error'));
-          setTimeout(() => {
-            removePendingUpload(tempId);
-            URL.revokeObjectURL(previewUrl);
-          }, 4000);
-        }
-        return;
-      } else {
-        const tempId = `pending_img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const previewUrl = URL.createObjectURL(file);
-        
-        const pendingMsg: Message = {
-          id: tempId,
-          sender: client.getUserId() || 'Me',
-          body: text.trim() || file.name || 'image',
-          timestamp: Date.now(),
-          isEncrypted: isDirect,
-          msgtype: MsgType.Image,
-          url: previewUrl,
-          info: {
-            mimetype: file.type,
-            size: file.size,
-            isPendingUpload: true,
-            uploadProgress: 10,
-          },
-          isDisappearing: isDisappearing,
-        };
-
-        setPendingUploads(prev => [...prev, pendingMsg]);
-        setTimeout(() => scrollToBottom('smooth'), 50);
-
-        let currentProgress = 10;
-        const progressTimer = setInterval(() => {
-          if (currentProgress < 85) {
-            currentProgress += Math.floor(Math.random() * 12) + 5;
-            if (currentProgress > 85) currentProgress = 85;
-            updatePendingProgress(tempId, currentProgress);
-          }
-        }, 250);
-
-        try {
-          const optimizedFile = await optimizeImage(file, 1920, 0.85);
-          updatePendingProgress(tempId, 40);
-          currentProgress = 40;
-
-          const uploadRes = await client.uploadContent(optimizedFile, {
-            progressHandler: (prog: any) => {
-              if (prog && prog.total > 0) {
-                const pct = 40 + Math.round((prog.loaded / prog.total) * 55);
-                currentProgress = Math.max(currentProgress, pct);
-                updatePendingProgress(tempId, currentProgress);
-              }
+                ...extraContent,
+              } as any);
             }
-          } as any);
-          const mxcUrl = uploadRes.content_uri;
 
-          updatePendingProgress(tempId, 98);
+            clearInterval(progressTimer);
+            updatePendingProgress(tempId, 100);
+            refreshMessages();
 
-          if (mxcUrl) {
-            await client.sendMessage(roomId, {
-              msgtype: MsgType.Image,
-              body: text.trim() || optimizedFile.name || 'image',
-              url: mxcUrl,
-              info: {
-                mimetype: optimizedFile.type,
-                size: optimizedFile.size,
-              },
-              ...extraContent,
-            } as any);
+            setTimeout(() => {
+              removePendingUpload(tempId);
+              URL.revokeObjectURL(previewUrl);
+              if (thumbPreviewUrl) URL.revokeObjectURL(thumbPreviewUrl);
+            }, 1000);
+
+          } catch (err: any) {
+            clearInterval(progressTimer);
+            console.error('Failed to upload video:', err);
+            updatePendingProgress(tempId, 0, true);
+            alert('동영상 업로드 실패: ' + (err.message || 'Unknown error'));
+            setTimeout(() => {
+              removePendingUpload(tempId);
+              URL.revokeObjectURL(previewUrl);
+            }, 4000);
           }
+        } else if (isImage) {
+          const tempId = `pending_img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          const previewUrl = URL.createObjectURL(file);
+          
+          const pendingMsg: Message = {
+            id: tempId,
+            sender: client.getUserId() || 'Me',
+            body: fileText.trim() || file.name || 'image',
+            timestamp: Date.now(),
+            isEncrypted: isDirect,
+            msgtype: MsgType.Image,
+            url: previewUrl,
+            info: {
+              mimetype: file.type,
+              size: file.size,
+              isPendingUpload: true,
+              uploadProgress: 10,
+            },
+            isDisappearing: isDisappearing,
+          };
 
-          clearInterval(progressTimer);
-          updatePendingProgress(tempId, 100);
-          refreshMessages();
+          setPendingUploads(prev => [...prev, pendingMsg]);
+          setTimeout(() => scrollToBottom('smooth'), 50);
 
-          setTimeout(() => {
-            removePendingUpload(tempId);
-            URL.revokeObjectURL(previewUrl);
-          }, 1000);
-        } catch (err: any) {
-          clearInterval(progressTimer);
-          console.error('Failed to upload image:', err);
-          updatePendingProgress(tempId, 0, true);
-          alert('이미지 업로드 실패: ' + (err.message || 'Unknown error'));
-          setTimeout(() => {
-            removePendingUpload(tempId);
-            URL.revokeObjectURL(previewUrl);
-          }, 4000);
+          let currentProgress = 10;
+          const progressTimer = setInterval(() => {
+            if (currentProgress < 85) {
+              currentProgress += Math.floor(Math.random() * 12) + 5;
+              if (currentProgress > 85) currentProgress = 85;
+              updatePendingProgress(tempId, currentProgress);
+            }
+          }, 250);
+
+          try {
+            const optimizedFile = await optimizeImage(file, 1920, 0.85);
+            updatePendingProgress(tempId, 40);
+            currentProgress = 40;
+
+            const uploadRes = await client.uploadContent(optimizedFile, {
+              progressHandler: (prog: any) => {
+                if (prog && prog.total > 0) {
+                  const pct = 40 + Math.round((prog.loaded / prog.total) * 55);
+                  currentProgress = Math.max(currentProgress, pct);
+                  updatePendingProgress(tempId, currentProgress);
+                }
+              }
+            } as any);
+            const mxcUrl = uploadRes.content_uri;
+
+            updatePendingProgress(tempId, 98);
+
+            if (mxcUrl) {
+              await client.sendMessage(roomId, {
+                msgtype: MsgType.Image,
+                body: fileText.trim() || optimizedFile.name || 'image',
+                url: mxcUrl,
+                info: {
+                  mimetype: optimizedFile.type,
+                  size: optimizedFile.size,
+                },
+                ...extraContent,
+              } as any);
+            }
+
+            clearInterval(progressTimer);
+            updatePendingProgress(tempId, 100);
+            refreshMessages();
+
+            setTimeout(() => {
+              removePendingUpload(tempId);
+              URL.revokeObjectURL(previewUrl);
+            }, 1000);
+          } catch (err: any) {
+            clearInterval(progressTimer);
+            console.error('Failed to upload image:', err);
+            updatePendingProgress(tempId, 0, true);
+            alert('이미지 업로드 실패: ' + (err.message || 'Unknown error'));
+            setTimeout(() => {
+              removePendingUpload(tempId);
+              URL.revokeObjectURL(previewUrl);
+            }, 4000);
+          }
+        } else {
+          // General File (m.file)
+          const tempId = `pending_file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          const previewUrl = URL.createObjectURL(file);
+          
+          const pendingMsg: Message = {
+            id: tempId,
+            sender: client.getUserId() || 'Me',
+            body: fileText.trim() || file.name || 'file',
+            timestamp: Date.now(),
+            isEncrypted: isDirect,
+            msgtype: 'm.file',
+            url: previewUrl,
+            info: {
+              mimetype: file.type || 'application/octet-stream',
+              size: file.size,
+              isPendingUpload: true,
+              uploadProgress: 10,
+            },
+            isDisappearing: isDisappearing,
+          };
+
+          setPendingUploads(prev => [...prev, pendingMsg]);
+          setTimeout(() => scrollToBottom('smooth'), 50);
+
+          let currentProgress = 10;
+          const progressTimer = setInterval(() => {
+            if (currentProgress < 85) {
+              currentProgress += Math.floor(Math.random() * 12) + 5;
+              if (currentProgress > 85) currentProgress = 85;
+              updatePendingProgress(tempId, currentProgress);
+            }
+          }, 250);
+
+          try {
+            const uploadRes = await client.uploadContent(file, {
+              progressHandler: (prog: any) => {
+                if (prog && prog.total > 0) {
+                  const pct = 40 + Math.round((prog.loaded / prog.total) * 55);
+                  currentProgress = Math.max(currentProgress, pct);
+                  updatePendingProgress(tempId, currentProgress);
+                }
+              }
+            } as any);
+            const mxcUrl = uploadRes.content_uri;
+
+            updatePendingProgress(tempId, 98);
+
+            if (mxcUrl) {
+              await client.sendMessage(roomId, {
+                msgtype: 'm.file',
+                body: fileText.trim() || file.name || 'file',
+                url: mxcUrl,
+                info: {
+                  mimetype: file.type || 'application/octet-stream',
+                  size: file.size,
+                },
+                ...extraContent,
+              } as any);
+            }
+
+            clearInterval(progressTimer);
+            updatePendingProgress(tempId, 100);
+            refreshMessages();
+
+            setTimeout(() => {
+              removePendingUpload(tempId);
+              URL.revokeObjectURL(previewUrl);
+            }, 1000);
+          } catch (err: any) {
+            clearInterval(progressTimer);
+            console.error('Failed to upload file:', err);
+            updatePendingProgress(tempId, 0, true);
+            alert('파일 업로드 실패: ' + (err.message || 'Unknown error'));
+            setTimeout(() => {
+              removePendingUpload(tempId);
+              URL.revokeObjectURL(previewUrl);
+            }, 4000);
+          }
         }
-        return;
-      }
+      };
+
+      const uploadPromises = files.map((file, idx) => {
+        const fileText = idx === 0 ? text : '';
+        return uploadSingleFile(file, fileText);
+      });
+      await Promise.all(uploadPromises);
     } else if (text.trim()) {
       try {
+        const cleanText = text.trim();
+        const isMd = hasMarkdown(cleanText);
         await client.sendMessage(roomId, {
           msgtype: MsgType.Text,
-          body: text.trim(),
+          body: cleanText,
+          format: isMd ? 'org.matrix.custom.html' : undefined,
+          formatted_body: isMd ? markdownToHtml(cleanText) : undefined,
           ...extraContent,
         } as any);
       } catch (err: any) {
@@ -386,12 +479,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
     handleCancelEdit();
 
     try {
+      const isMd = hasMarkdown(text);
       await client.sendMessage(roomId, {
         msgtype: MsgType.Text,
         body: `* ${text}`,
+        format: isMd ? 'org.matrix.custom.html' : undefined,
+        formatted_body: isMd ? `* ${markdownToHtml(text)}` : undefined,
         'm.new_content': {
           msgtype: MsgType.Text,
-          body: text
+          body: text,
+          format: isMd ? 'org.matrix.custom.html' : undefined,
+          formatted_body: isMd ? markdownToHtml(text) : undefined,
         },
         'm.relates_to': {
           rel_type: 'm.replace' as any,

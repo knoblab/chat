@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useMatrix } from '../../matrix/MatrixProvider';
 import { useChatStore } from '../../stores/useChatStore';
-import { Send, Image as ImageIcon, Film, Edit2, X, Timer } from 'lucide-react';
+import { Send, Edit2, X, Timer, Paperclip, FileText } from 'lucide-react';
 
 interface MessageInputProps {
   roomId: string;
   editingMessageId: string | null;
   editingText: string;
   onCancelEdit: () => void;
-  onSend: (text: string, file?: File) => Promise<void>;
+  onSend: (text: string, files?: File[]) => Promise<void>;
   onSaveEdit: (text: string) => Promise<void>;
   typingUsers?: string[];
 }
@@ -28,11 +28,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const [inputText, setInputText] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [selectedAttachment, setSelectedAttachment] = useState<File | null>(null);
-  const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
+  const [selectedAttachments, setSelectedAttachments] = useState<File[]>([]);
+  const [attachmentPreviewUrls, setAttachmentPreviewUrls] = useState<string[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -72,38 +72,71 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   useEffect(() => {
     return () => {
-      if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
+      attachmentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
     };
-  }, [attachmentPreviewUrl]);
+  }, [attachmentPreviewUrls]);
 
-  const handleRemoveAttachment = () => {
-    if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
-    setSelectedAttachment(null);
-    setAttachmentPreviewUrl(null);
+  const handleRemoveAttachment = (index: number) => {
+    URL.revokeObjectURL(attachmentPreviewUrls[index]);
+    setSelectedAttachments(prev => prev.filter((_, i) => i !== index));
+    setAttachmentPreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleClearAttachments = () => {
+    attachmentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    setSelectedAttachments([]);
+    setAttachmentPreviewUrls([]);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    const isVideo = file.type.startsWith('video/');
-    const maxSize = isVideo ? 45 * 1024 * 1024 : 25 * 1024 * 1024;
-    const sizeLabel = isVideo ? '45MB' : '25MB';
+    if (files.length > 1) {
+      // Multiple files - must be images, max 4, max 10MB each
+      const allImages = files.every(f => f.type.startsWith('image/'));
+      if (!allImages) {
+        alert('모아보내기는 이미지만 가능하며, 동영상이나 일반 파일은 한 번에 하나씩만 전송할 수 있습니다.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
 
-    // Size Check
-    if (file.size > maxSize) {
-      alert(`단일 ${isVideo ? '동영상' : '파일'} 업로드는 최대 ${sizeLabel}까지만 가능합니다.`);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
+      if (files.length > 4) {
+        alert('이미지는 한 번에 최대 4장까지만 전송할 수 있습니다.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
+      const overSized = files.some(f => f.size > 10 * 1024 * 1024);
+      if (overSized) {
+        alert('모아보내기 시 각 이미지의 크기는 최대 10MB까지만 가능합니다.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+    } else {
+      // Single file validation
+      const file = files[0];
+      const isVideo = file.type.startsWith('video/');
+      const maxSize = isVideo ? 45 * 1024 * 1024 : 25 * 1024 * 1024;
+      const sizeLabel = isVideo ? '45MB' : '25MB';
+
+      if (file.size > maxSize) {
+        alert(`단일 ${isVideo ? '동영상' : '파일'} 업로드는 최대 ${sizeLabel}까지만 가능합니다.`);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
     }
 
-    setSelectedAttachment(file);
-    const url = URL.createObjectURL(file);
-    setAttachmentPreviewUrl(url);
+    // Clear previous attachment previews
+    attachmentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+
+    setSelectedAttachments(files);
+    const urls = files.map(file => URL.createObjectURL(file));
+    setAttachmentPreviewUrls(urls);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
     if (!client || editingMessageId) return;
 
@@ -118,15 +151,42 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      // Trigger submission
+      const form = e.currentTarget.form;
+      if (form) {
+        form.requestSubmit();
+      }
+    }
+  };
+
+  // Auto-adjust textarea height
+  useEffect(() => {
+    const textarea = textInputRef.current;
+    if (!textarea) return;
+    
+    textarea.style.height = 'auto';
+    const newHeight = Math.min(textarea.scrollHeight, 120);
+    textarea.style.height = `${newHeight}px`;
+
+    if (newHeight > 45) {
+      textarea.style.borderRadius = '12px';
+    } else {
+      textarea.style.borderRadius = '20px';
+    }
+  }, [inputText]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() && !selectedAttachment) return;
+    if (!inputText.trim() && selectedAttachments.length === 0) return;
 
     const text = inputText;
-    const fileToSend = selectedAttachment;
+    const filesToSend = selectedAttachments;
 
     setInputText('');
-    handleRemoveAttachment();
+    handleClearAttachments();
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (client) {
@@ -138,7 +198,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     } else {
       setUploading(true);
       try {
-        await onSend(text, fileToSend || undefined);
+        await onSend(text, filesToSend.length > 0 ? filesToSend : undefined);
       } finally {
         setUploading(false);
         textInputRef.current?.focus();
@@ -168,28 +228,71 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      {selectedAttachment && attachmentPreviewUrl && (
-        <div className="pdf-flex-row pdf-items-center pdf-justify-between" style={{ background: 'var(--color-bg-secondary)', padding: '10px 14px', borderBottom: '1px solid var(--color-border-default)', gap: '12px' }}>
-          <div className="pdf-flex-row pdf-items-center" style={{ gap: '10px', overflow: 'hidden' }}>
-            {selectedAttachment.type.startsWith('video/') ? (
-              <video src={attachmentPreviewUrl} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border-default)', background: '#000' }} muted playsInline />
-            ) : (
-              <img src={attachmentPreviewUrl} alt="Preview" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border-default)' }} />
-            )}
-            <div className="pdf-flex-col" style={{ overflow: 'hidden' }}>
-              <span className="pdf-text-copy-13-mono" style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>{selectedAttachment.name}</span>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{(selectedAttachment.size / (1024 * 1024)).toFixed(2)} MB ({selectedAttachment.type.startsWith('video/') ? '동영상 썸네일 자동추출 대기' : '전송 대기 중'})</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleRemoveAttachment}
-            className="pdf-secondary-btn pdf-btn-xs"
-            style={{ width: '28px', height: '28px', padding: 0, justifyContent: 'center', borderRadius: '14px' }}
-            title="첨부 취소"
-          >
-            <X size={15} />
-          </button>
+      {selectedAttachments.length > 0 && (
+        <div className="pdf-flex-row pdf-items-center" style={{ background: 'var(--color-bg-secondary)', padding: '10px 14px', borderBottom: '1px solid var(--color-border-default)', gap: '12px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {selectedAttachments.map((file, idx) => {
+            const previewUrl = attachmentPreviewUrls[idx];
+            const isVideo = file.type.startsWith('video/');
+            const isImage = file.type.startsWith('image/');
+            
+            return (
+              <div 
+                key={idx} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  background: 'var(--color-bg-primary)', 
+                  border: '1px solid var(--color-border-default)', 
+                  borderRadius: '8px', 
+                  padding: '6px 8px', 
+                  position: 'relative',
+                  flexShrink: 0,
+                  maxWidth: '220px'
+                }}
+              >
+                {isImage && previewUrl ? (
+                  <img src={previewUrl} alt="Preview" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }} />
+                ) : isVideo && previewUrl ? (
+                  <video src={previewUrl} style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', background: '#000' }} muted playsInline />
+                ) : (
+                  <div style={{ width: '40px', height: '40px', borderRadius: '4px', background: 'var(--color-bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FileText size={18} />
+                  </div>
+                )}
+                
+                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '120px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>
+                    {file.name}
+                  </span>
+                  <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)' }}>
+                    {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  </span>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(idx)}
+                  style={{
+                    background: 'var(--color-bg-secondary)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '18px',
+                    height: '18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: 'var(--color-text-primary)',
+                    flexShrink: 0
+                  }}
+                  title="삭제"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -215,7 +318,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           type="file" 
           ref={fileInputRef} 
           style={{ display: 'none' }} 
-          accept="image/*,video/*"
+          multiple
           onChange={handleFileSelect}
         />
         {!editingMessageId && (
@@ -225,11 +328,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
               className="pdf-secondary-btn"
-              style={{ width: isMobile ? '40px' : '42px', height: isMobile ? '40px' : '42px', padding: 0, justifyContent: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '2px', borderRadius: '20px', background: 'var(--color-bg-secondary)', border: 'none' }}
-              title="이미지/동영상 업로드"
+              style={{ width: isMobile ? '40px' : '42px', height: isMobile ? '40px' : '42px', padding: 0, justifyContent: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', borderRadius: '20px', background: 'var(--color-bg-secondary)', border: 'none' }}
+              title="파일/이미지 첨부"
             >
-              <ImageIcon size={17} />
-              <Film size={15} />
+              <Paperclip size={18} />
             </button>
             <button
               type="button"
@@ -248,33 +350,37 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             </button>
           </>
         )}
-        <input
-          type="text"
+        <textarea
           ref={textInputRef}
           className="pdf-input"
-          placeholder={editingMessageId ? '수정할 메시지를 입력하세요...' : (uploading ? '전송 중...' : (selectedAttachment ? '설명(캡션) 입력 후 전송...' : '메시지 입력...'))}
+          placeholder={editingMessageId ? '수정할 메시지를 입력하세요...' : (uploading ? '전송 중...' : (selectedAttachments.length > 0 ? '설명(캡션) 입력 후 전송...' : '메시지 입력...'))}
           value={inputText}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
           disabled={uploading}
+          rows={1}
           style={{ 
             flex: 1, 
             height: isMobile ? '40px' : '42px', 
             borderRadius: '20px', 
-            paddingLeft: '16px', 
-            paddingRight: '16px', 
+            padding: '10px 16px', 
             fontSize: isMobile ? '14px' : '15px',
             background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--color-border-default)'
+            border: '1px solid var(--color-border-default)',
+            resize: 'none',
+            fontFamily: 'inherit',
+            lineHeight: 1.4,
+            overflowY: 'auto'
           }}
         />
         <button
           type="submit"
-          disabled={(!inputText.trim() && !selectedAttachment && !uploading) || uploading}
+          disabled={(!inputText.trim() && selectedAttachments.length === 0 && !uploading) || uploading}
           className="pdf-btn-primary"
           style={{ 
             width: isMobile ? '40px' : '42px', height: isMobile ? '40px' : '42px', 
             padding: 0, justifyContent: 'center', flexShrink: 0, borderRadius: '20px',
-            boxShadow: (!inputText.trim() && !selectedAttachment) ? 'none' : '0 3px 10px rgba(239, 68, 68, 0.4)'
+            boxShadow: (!inputText.trim() && selectedAttachments.length === 0) ? 'none' : '0 3px 10px rgba(239, 68, 68, 0.4)'
           }}
         >
           <Send size={16} />
