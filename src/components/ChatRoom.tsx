@@ -24,7 +24,7 @@ interface ChatRoomProps {
 
 export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
   const { client } = useMatrix();
-  const { room, messages, refreshMessages } = useMessages(roomId);
+  const { room, messages, refreshMessages, loadOlderMessages } = useMessages(roomId);
   const { disappearingMode } = useChatStore();
   const isDisappearing = disappearingMode[roomId] || false;
 
@@ -684,6 +684,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
             setIsAtBottom(atBottom);
             if (atBottom) setShowNewMsgPill(false);
           }}
+          onLoadOlder={loadOlderMessages}
         />
 
         {showNewMsgPill && (

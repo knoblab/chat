@@ -173,5 +173,21 @@ export const useMessages = (roomId: string) => {
     };
   }, [client, roomId, updateMessages, debouncedUpdateMessages, sendReadReceiptForLastMessage]);
 
-  return { room, messages, refreshMessages: updateMessages };
+  const [loadingOlder, setLoadingOlder] = useState(false);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!client || !room || loadingOlder) return;
+    try {
+      setLoadingOlder(true);
+      const timeline = room.getLiveTimeline();
+      await client.paginateEventTimeline(timeline, { back: true, limit: 30 });
+      updateMessages();
+    } catch (err) {
+      console.warn('Failed to load older messages:', err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [client, room, loadingOlder, updateMessages]);
+
+  return { room, messages, refreshMessages: updateMessages, loadOlderMessages };
 };

@@ -1,4 +1,259 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Copy, Check } from 'lucide-react';
+
+const JS_RULES = [
+  { type: 'comment', regex: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+  { type: 'string', regex: /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g },
+  { type: 'keyword', regex: /\b(const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|import|export|from|class|extends|new|this|typeof|instanceof|try|catch|finally|throw|async|await|yield|true|false|null|undefined)\b/g },
+  { type: 'built-in', regex: /\b(console|window|document|Promise|Object|Array|String|Number|Boolean|Function|Error|JSON)\b/g },
+  { type: 'number', regex: /\b\d+(?:\.\d+)?\b/g },
+];
+
+const PY_RULES = [
+  { type: 'comment', regex: /#[^\n]*/g },
+  { type: 'string', regex: /"{3}[\s\S]*?"{3}|'{3}[\s\S]*?'{3}|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g },
+  { type: 'decorator', regex: /@\w+/g },
+  { type: 'keyword', regex: /\b(def|class|return|if|elif|else|for|while|break|continue|import|from|as|in|is|not|and|or|try|except|finally|raise|assert|pass|lambda|with|yield|global|nonlocal|True|False|None)\b/g },
+  { type: 'number', regex: /\b\d+(?:\.\d+)?\b/g },
+];
+
+const C_RULES = [
+  { type: 'comment', regex: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+  { type: 'string', regex: /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g },
+  { type: 'preprocessor', regex: /^\s*#(?:include|define|undef|ifdef|ifndef|if|else|elif|endif)\b/gm },
+  { type: 'keyword', regex: /\b(int|char|float|double|void|struct|union|enum|typedef|const|static|extern|register|volatile|auto|sizeof|if|else|for|while|do|switch|case|default|break|continue|return|goto)\b/g },
+  { type: 'number', regex: /\b\d+(?:\.\d+)?\b/g },
+];
+
+const HTML_RULES = [
+  { type: 'comment', regex: /<!--[\s\S]*?-->/g },
+  { type: 'tag', regex: /<\/?[a-zA-Z0-9:-]+(?:\s[^>]*)?>/g },
+];
+
+const tokenize = (code: string, rules: { type: string; regex: RegExp }[]) => {
+  let tokens: { type: string; value: string }[] = [{ type: 'text', value: code }];
+
+  rules.forEach(rule => {
+    let nextTokens: { type: string; value: string }[] = [];
+    
+    tokens.forEach(token => {
+      if (token.type !== 'text') {
+        nextTokens.push(token);
+        return;
+      }
+
+      let lastIndex = 0;
+      rule.regex.lastIndex = 0;
+      const matches = [...token.value.matchAll(rule.regex)];
+
+      matches.forEach(match => {
+        const full = match[0];
+        const matchIndex = match.index!;
+
+        if (matchIndex > lastIndex) {
+          nextTokens.push({ type: 'text', value: token.value.substring(lastIndex, matchIndex) });
+        }
+
+        nextTokens.push({ type: rule.type, value: full });
+        lastIndex = matchIndex + full.length;
+      });
+
+      if (lastIndex < token.value.length) {
+        nextTokens.push({ type: 'text', value: token.value.substring(lastIndex) });
+      }
+    });
+
+    tokens = nextTokens;
+  });
+
+  return tokens;
+};
+
+const renderHtmlTag = (tag: string) => {
+  const tagRegex = /^(<\/?)([a-zA-Z0-9:-]+)([\s\S]*?)(>?)$/;
+  const match = tag.match(tagRegex);
+  if (!match) return <span style={{ color: '#8ec07c' }}>{tag}</span>;
+
+  const [_, openBracket, tagName, attrs, closeBracket] = match;
+  
+  const attrRegex = /(\s[a-zA-Z0-9:-]+=)(?:"([^"]*)"|'([^']*)')|(\s[a-zA-Z0-9:-]+)/g;
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+  const attrMatches = [...attrs.matchAll(attrRegex)];
+
+  attrMatches.forEach((attrMatch, idx) => {
+    const full = attrMatch[0];
+    const matchIndex = attrMatch.index!;
+
+    if (matchIndex > lastIndex) {
+      elements.push(attrs.substring(lastIndex, matchIndex));
+    }
+
+    if (attrMatch[1]) {
+      const attrName = attrMatch[1];
+      const attrVal = attrMatch[2] !== undefined ? attrMatch[2] : attrMatch[3];
+      elements.push(
+        <span key={`attr-${idx}`}>
+          <span style={{ color: '#fabd2f' }}>{attrName}</span>
+          <span style={{ color: '#b8bb26' }}>"{attrVal}"</span>
+        </span>
+      );
+    } else if (attrMatch[4]) {
+      elements.push(
+        <span key={`attr-${idx}`} style={{ color: '#fabd2f' }}>
+          {attrMatch[4]}
+        </span>
+      );
+    }
+
+    lastIndex = matchIndex + full.length;
+  });
+
+  if (lastIndex < attrs.length) {
+    elements.push(attrs.substring(lastIndex));
+  }
+
+  return (
+    <span style={{ color: '#8ec07c' }}>
+      {openBracket}
+      <span style={{ color: '#fe8019', fontWeight: 600 }}>{tagName}</span>
+      {elements}
+      {closeBracket}
+    </span>
+  );
+};
+
+const CodeBlock: React.FC<{ code: string; language?: string; isMe: boolean }> = ({ code, language, isMe }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy code:', err);
+    }
+  };
+
+  const getTokens = () => {
+    const lang = language?.toLowerCase();
+    if (lang === 'js' || lang === 'javascript' || lang === 'ts' || lang === 'typescript') {
+      return tokenize(code, JS_RULES);
+    }
+    if (lang === 'py' || lang === 'python') {
+      return tokenize(code, PY_RULES);
+    }
+    if (lang === 'c' || lang === 'cpp') {
+      return tokenize(code, C_RULES);
+    }
+    if (lang === 'html' || lang === 'xml') {
+      return tokenize(code, HTML_RULES);
+    }
+    return [{ type: 'text', value: code }];
+  };
+
+  const renderToken = (token: { type: string; value: string }, idx: number) => {
+    const lang = language?.toLowerCase();
+    if (token.type === 'text') {
+      return token.value;
+    }
+    if (token.type === 'tag' && (lang === 'html' || lang === 'xml')) {
+      return <span key={idx}>{renderHtmlTag(token.value)}</span>;
+    }
+
+    let color = '#d4d4d4';
+    let fontWeight = 'normal';
+
+    switch (token.type) {
+      case 'comment':
+        color = '#7c6f64';
+        break;
+      case 'string':
+        color = '#b8bb26';
+        break;
+      case 'keyword':
+        color = '#fb4934';
+        fontWeight = 'bold';
+        break;
+      case 'built-in':
+        color = '#83a598';
+        break;
+      case 'number':
+        color = '#d3869b';
+        break;
+      case 'decorator':
+        color = '#fabd2f';
+        break;
+      case 'preprocessor':
+        color = '#8ec07c';
+        fontWeight = 'bold';
+        break;
+    }
+
+    return (
+      <span key={idx} style={{ color, fontWeight }}>
+        {token.value}
+      </span>
+    );
+  };
+
+  const tokens = getTokens();
+
+  return (
+    <div style={{ position: 'relative', width: '100%', margin: '8px 0' }}>
+      <pre
+        style={{
+          background: '#000000',
+          color: '#d4d4d4',
+          padding: '12px 14px',
+          borderRadius: '8px',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          overflowX: 'auto',
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          margin: 0,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+          paddingRight: '40px',
+          lineHeight: 1.5
+        }}
+      >
+        <code>{tokens.map((token, idx) => renderToken(token, idx))}</code>
+      </pre>
+      <button
+        onClick={handleCopy}
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          border: 'none',
+          borderRadius: '4px',
+          padding: '4px 6px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          opacity: 0.6,
+          transition: 'opacity 0.2s, background-color 0.2s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '1';
+          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '0.6';
+          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+        }}
+        title="코드 복사"
+      >
+        {copied ? <Check size={14} style={{ color: '#10b981' }} /> : <Copy size={14} />}
+      </button>
+    </div>
+  );
+};
 
 const INLINE_REGEX = /(`([^`]+)`|\*\*\*([^*]+)\*\*\*|___([^_]+)___|\*\*([^*]+)\*\*|~~([^~]+)~~|\*([^*]+)\*|_([^_]+)_|https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
 
@@ -110,35 +365,29 @@ export const renderSimpleMarkdown = (text: string, isMe: boolean): React.ReactNo
   let inCodeBlock = false;
   let codeBlockLines: string[] = [];
   let codeBlockIndex = 0;
+  let currentLanguage = '';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line.trim().startsWith('```')) {
+    const codeBlockStartMatch = line.match(/^```([a-zA-Z0-9+#-]*)\s*$/);
+    if (codeBlockStartMatch) {
       if (inCodeBlock) {
         // End code block
         result.push(
-          <pre
+          <CodeBlock
             key={`cb-${codeBlockIndex++}`}
-            style={{
-              background: isMe ? 'rgba(0, 0, 0, 0.35)' : 'rgba(0, 0, 0, 0.08)',
-              padding: '8px 10px',
-              borderRadius: '6px',
-              overflowX: 'auto',
-              fontFamily: 'monospace',
-              fontSize: '12px',
-              margin: '4px 0',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all'
-            }}
-          >
-            <code>{codeBlockLines.join('\n')}</code>
-          </pre>
+            code={codeBlockLines.join('\n')}
+            language={currentLanguage}
+            isMe={isMe}
+          />
         );
         codeBlockLines = [];
         inCodeBlock = false;
+        currentLanguage = '';
       } else {
         inCodeBlock = true;
+        currentLanguage = codeBlockStartMatch[1];
       }
       continue;
     }
@@ -281,22 +530,12 @@ export const renderSimpleMarkdown = (text: string, isMe: boolean): React.ReactNo
 
   if (inCodeBlock && codeBlockLines.length > 0) {
     result.push(
-      <pre
+      <CodeBlock
         key={`cb-${codeBlockIndex}`}
-        style={{
-          background: isMe ? 'rgba(0, 0, 0, 0.35)' : 'rgba(0, 0, 0, 0.08)',
-          padding: '8px 10px',
-          borderRadius: '6px',
-          overflowX: 'auto',
-          fontFamily: 'monospace',
-          fontSize: '12px',
-          margin: '4px 0',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all'
-        }}
-      >
-        <code>{codeBlockLines.join('\n')}</code>
-      </pre>
+        code={codeBlockLines.join('\n')}
+        language={currentLanguage}
+        isMe={isMe}
+      />
     );
   }
 

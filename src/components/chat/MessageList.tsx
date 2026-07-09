@@ -60,7 +60,9 @@ const renderMessageBody = (msg: Message, isMe: boolean, isBigEmoji = false) => {
     );
   }
 
-  if (msg.formattedBody) {
+  const hasHtml = msg.body ? /<[a-z][\s\S]*>/i.test(msg.body) : false;
+
+  if (msg.formattedBody && hasHtml) {
     return (
       <div 
         className="pdf-formatted-body"
@@ -81,6 +83,7 @@ interface MessageListProps {
   onContextMenu: (x: number, y: number, msg: Message) => void;
   virtuosoRef: React.RefObject<VirtuosoHandle | null>;
   onAtBottomStateChange?: (atBottom: boolean) => void;
+  onLoadOlder?: () => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -90,6 +93,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   onContextMenu,
   virtuosoRef,
   onAtBottomStateChange,
+  onLoadOlder,
 }) => {
   const { client } = useMatrix();
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
@@ -107,7 +111,9 @@ export const MessageList: React.FC<MessageListProps> = ({
           initialTopMostItemIndex={messages.length > 0 ? messages.length - 1 : 0}
           followOutput="auto"
           alignToBottom
+          increaseViewportBy={{ top: 300, bottom: 300 }}
           atBottomStateChange={onAtBottomStateChange}
+          startReached={onLoadOlder}
           style={{ height: '100%', width: '100%', overflowX: 'hidden' }}
           itemContent={(idx, msg) => {
             const isMe = msg.sender === client?.getUserId();
@@ -128,7 +134,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             const showProfile = !isMe && isFirstInGroup;
             const showTime = !isSameSenderAsNext || !isSameMinuteAsNext;
             const formattedTime = currDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const marginTop = idx === 0 ? 0 : (isFirstInGroup ? 'var(--space-150)' : 'var(--space-025)');
+            const spacingTop = idx === 0 ? 0 : (isFirstInGroup ? 'var(--space-150)' : 'var(--space-025)');
             const isOnlyEmojiMsg = isOnlyEmojis(msg.body || '') && !msg.url && msg.msgtype !== 'm.image' && msg.msgtype !== 'm.video' && msg.msgtype !== 'm.file' && !msg.isDisappearing;
 
             return (
@@ -138,9 +144,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                 alignItems: isMe ? 'flex-end' : 'flex-start',
                 width: '100%',
                 padding: '0 var(--space-300)',
-                paddingTop: idx === 0 ? 'var(--space-300)' : 0,
+                paddingTop: idx === 0 ? 'var(--space-300)' : spacingTop,
                 paddingBottom: idx === messages.length - 1 ? 'var(--space-300)' : 0,
-                marginTop: marginTop
               }}>
                 {showProfile && (
                   <div className="pdf-flex-row pdf-items-center" style={{ gap: 'var(--space-100)', marginBottom: 'var(--space-050)' }}>

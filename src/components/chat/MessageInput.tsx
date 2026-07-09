@@ -89,25 +89,27 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
+    const newFiles = Array.from(e.target.files || []);
+    if (newFiles.length === 0) return;
 
-    if (files.length > 1) {
+    const combinedFiles = [...selectedAttachments, ...newFiles];
+
+    if (combinedFiles.length > 1) {
       // Multiple files - must be images, max 4, max 10MB each
-      const allImages = files.every(f => f.type.startsWith('image/'));
+      const allImages = combinedFiles.every(f => f.type.startsWith('image/'));
       if (!allImages) {
         alert('모아보내기는 이미지만 가능하며, 동영상이나 일반 파일은 한 번에 하나씩만 전송할 수 있습니다.');
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
 
-      if (files.length > 4) {
+      if (combinedFiles.length > 4) {
         alert('이미지는 한 번에 최대 4장까지만 전송할 수 있습니다.');
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
 
-      const overSized = files.some(f => f.size > 10 * 1024 * 1024);
+      const overSized = combinedFiles.some(f => f.size > 10 * 1024 * 1024);
       if (overSized) {
         alert('모아보내기 시 각 이미지의 크기는 최대 10MB까지만 가능합니다.');
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -115,7 +117,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       }
     } else {
       // Single file validation
-      const file = files[0];
+      const file = combinedFiles[0];
       const isVideo = file.type.startsWith('video/');
       const maxSize = isVideo ? 45 * 1024 * 1024 : 25 * 1024 * 1024;
       const sizeLabel = isVideo ? '45MB' : '25MB';
@@ -127,12 +129,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       }
     }
 
-    // Clear previous attachment previews
-    attachmentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
-
-    setSelectedAttachments(files);
-    const urls = files.map(file => URL.createObjectURL(file));
-    setAttachmentPreviewUrls(urls);
+    // Append to existing selection
+    setSelectedAttachments(combinedFiles);
+    const newUrls = newFiles.map(file => URL.createObjectURL(file));
+    setAttachmentPreviewUrls(prev => [...prev, ...newUrls]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -152,12 +152,56 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Tab') {
       e.preventDefault();
-      // Trigger submission
-      const form = e.currentTarget.form;
-      if (form) {
-        form.requestSubmit();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const value = textarea.value;
+
+      // Insert 2 spaces at the cursor position
+      const newValue = value.substring(0, start) + "  " + value.substring(end);
+      setInputText(newValue);
+
+      // Reset cursor position
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+      }, 0);
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      const isCodeBlockOpen = (inputText.match(/```/g) || []).length % 2 === 1;
+      if (isCodeBlockOpen && !e.shiftKey) {
+        e.preventDefault();
+        const textarea = e.currentTarget;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const value = textarea.value;
+
+        // Auto-indent: extract the indentation from the current line
+        const lines = value.substring(0, start).split('\n');
+        const lastLine = lines[lines.length - 1];
+        const indentMatch = lastLine.match(/^(\s*)/);
+        const indent = indentMatch ? indentMatch[1] : '';
+
+        const insertText = '\n' + indent;
+        const newValue = value.substring(0, start) + insertText + value.substring(end);
+        setInputText(newValue);
+
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + insertText.length;
+        }, 0);
+        return;
+      }
+
+      if (!e.shiftKey) {
+        e.preventDefault();
+        // Trigger submission
+        const form = e.currentTarget.form;
+        if (form) {
+          form.requestSubmit();
+        }
       }
     }
   };
@@ -368,7 +412,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             background: 'var(--color-bg-secondary)',
             border: '1px solid var(--color-border-default)',
             resize: 'none',
-            fontFamily: 'inherit',
+            fontFamily: (inputText.match(/```/g) || []).length % 2 === 1 ? 'monospace' : 'inherit',
             lineHeight: 1.4,
             overflowY: 'auto'
           }}
