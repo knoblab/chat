@@ -1,7 +1,7 @@
 {
   "name": "QPI Chat",
   "short_name": "QPI Chat",
-  "description": "End-to-End Encrypted Messenger on Matrix Protocol with Google Identity",
+  "description": "End-to-End Encrypted Messenger on Matrix Protocol",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",

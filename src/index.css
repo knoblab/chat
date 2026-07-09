@@ -804,3 +804,19 @@ button {
   transform: translateY(-1px);
 }
 
+@keyframes e2ee-info-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.e2ee-info-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+

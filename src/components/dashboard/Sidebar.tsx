@@ -4,8 +4,9 @@ import { useUIStore } from '../../stores/useUIStore';
 import { useChatStore } from '../../stores/useChatStore';
 import { RoomList } from '../RoomList';
 import { FriendList } from '../FriendList';
+import { E2EEInfoButton } from '../E2EEInfo';
 import { Preset } from 'matrix-js-sdk';
-import { Settings, Sun, Moon, LogOut, MessageSquare, Users, Plus } from 'lucide-react';
+import { Settings, Sun, Moon, LogOut, MessageSquare, Users, Plus, Sparkles } from 'lucide-react';
 
 interface SidebarProps {
   onOpenProfile: () => void;
@@ -140,7 +141,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenProfile }) => {
       {/* Sidebar Content based on Tab */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {activeTab === 'chats' ? (
-          <RoomList onSelectRoom={selectRoom} selectedRoomId={selectedRoomId} />
+          <>
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.03) 100%)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              margin: '10px 12px 6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'visible' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '6px', background: 'var(--color-functional-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                  <Sparkles size={14} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'visible' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)', display: 'inline-flex', alignItems: 'center' }}>
+                    <span>100% E2EE 종단간 암호화</span>
+                    <E2EEInfoButton />
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>• 대화 당사자만 열람 가능</span>
+                </div>
+              </div>
+            </div>
+            <RoomList onSelectRoom={selectRoom} selectedRoomId={selectedRoomId} />
+          </>
         ) : (
           <FriendList onSelectRoom={selectRoom} selectedRoomId={selectedRoomId} onSwitchToChats={() => setActiveTab('chats')} />
         )}

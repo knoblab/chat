@@ -10,6 +10,7 @@ import { ChatRoom } from '../components/ChatRoom';
 import { Sidebar } from '../components/dashboard/Sidebar';
 import { MobileNav } from '../components/dashboard/MobileNav';
 import { SettingsPanel } from '../components/dashboard/SettingsPanel';
+import { E2EEInfoButton } from '../components/E2EEInfo';
 import { Preset } from 'matrix-js-sdk';
 import { Plus, Sun, Moon, X, Sparkles, UserPlus, ShieldCheck } from 'lucide-react';
 
@@ -116,7 +117,7 @@ export const Dashboard: React.FC = () => {
 
           <div className="pdf-flex-row pdf-items-center" style={{ gap: '8px' }}>
             {mobileTab === 'chats' && (
-              <button 
+              <button
                 onClick={() => handleCreateRoom()}
                 disabled={creatingRoom}
                 className="pdf-btn-primary pdf-btn-xs"
@@ -127,7 +128,7 @@ export const Dashboard: React.FC = () => {
               </button>
             )}
             {mobileTab === 'friends' && (
-              <button 
+              <button
                 onClick={() => {
                   const input = document.querySelector('input[placeholder*="User Code"]') as HTMLInputElement;
                   if (input) input.focus();
@@ -138,8 +139,8 @@ export const Dashboard: React.FC = () => {
                 <UserPlus size={13} /> 추가
               </button>
             )}
-            <button 
-              onClick={toggleTheme} 
+            <button
+              onClick={toggleTheme}
               className="pdf-secondary-btn pdf-btn-xs"
               style={{ width: '32px', height: '32px', padding: 0, justifyContent: 'center', borderRadius: '50%' }}
               title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
@@ -157,20 +158,23 @@ export const Dashboard: React.FC = () => {
                   <div style={{ width: 30, height: 30, borderRadius: '8px', background: 'var(--color-functional-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
                     <Sparkles size={15} />
                   </div>
-                  <div className="pdf-flex-row pdf-items-center" style={{ gap: '6px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>100% E2EE 종단간 암호화</span>
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>• 서버 열람 불가</span>
+                  <div className="pdf-flex-row pdf-items-center" style={{ gap: '6px', overflow: 'visible', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', display: 'inline-flex', alignItems: 'center' }}>
+                      <span>100% E2EE 종단간 암호화</span>
+                      <E2EEInfoButton />
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>• 대화 당사자만 열람 가능</span>
                   </div>
                 </div>
-                <button 
-                  onClick={handleCreateRoom} 
-                  className="pdf-btn-primary" 
+                <button
+                  onClick={handleCreateRoom}
+                  className="pdf-btn-primary"
                   style={{ height: '32px', padding: '0 12px', borderRadius: '16px', fontSize: '12px', fontWeight: 600, gap: '4px', flexShrink: 0 }}
                 >
                   <Plus size={14} /> 새 채팅방
                 </button>
               </div>
-              
+
               <div style={{ padding: '0 var(--space-100)' }}>
                 <RoomList onSelectRoom={selectRoom} selectedRoomId={selectedRoomId} />
               </div>
@@ -218,7 +222,7 @@ export const Dashboard: React.FC = () => {
       )}
 
       {toastNotification && (
-        <div 
+        <div
           className="pdf-animate-fade-in pdf-panel pdf-shadow-glow"
           style={{
             position: 'fixed', top: 'var(--space-200)', right: 'var(--space-200)', zIndex: 9999,
@@ -232,7 +236,7 @@ export const Dashboard: React.FC = () => {
         >
           <div className="pdf-flex-row pdf-items-center pdf-justify-between pdf-mb-050">
             <span className="pdf-text-label-16" style={{ fontSize: '13px', fontWeight: 600 }}>{toastNotification.sender}</span>
-            <button 
+            <button
               onClick={(e) => { e.stopPropagation(); setToastNotification(null); }}
               style={{ padding: 0, color: 'var(--color-text-secondary)', background: 'transparent' }}
             >
