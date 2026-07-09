@@ -305,30 +305,96 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     ) : msg.msgtype === 'm.image' && msg.url ? (
                       <div style={{ position: 'relative' }}>
-                        <div onClick={() => !msg.info?.isPendingUpload && setSelectedImageUrl(msg.url!)}>
-                          <AuthImage 
-                            mxcUrl={msg.url}
-                            alt={msg.body} 
-                            className="pdf-radius-sm"
-                            style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: msg.info?.isPendingUpload ? 'default' : 'pointer' }}
-                          />
-                        </div>
-                        {!msg.info?.isPendingUpload && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadMxcMedia(client, msg.url!, msg.body || 'download');
+                        {msg.info?.images && msg.info.images.length > 1 ? (
+                          <div 
+                            style={{ 
+                              display: 'grid', 
+                              gridTemplateColumns: msg.info.images.length === 3 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', 
+                              gap: '4px',
+                              width: '100%',
+                              borderRadius: '6px',
+                              overflow: 'hidden'
                             }}
-                            style={{
-                              position: 'absolute', top: 4, right: 4,
-                              background: 'rgba(0,0,0,0.5)', color: '#fff',
-                              border: 'none', borderRadius: '4px', padding: '4px',
-                              cursor: 'pointer', display: 'flex', alignItems: 'center'
-                            }}
-                            title="Download Image"
                           >
-                            <Download size={14} />
-                          </button>
+                            {msg.info.images.map((img: any, idx: number) => (
+                              <div 
+                                key={idx} 
+                                style={{ 
+                                  aspectRatio: '1', 
+                                  position: 'relative', 
+                                  overflow: 'hidden',
+                                  width: '100%'
+                                }} 
+                                onClick={() => !msg.info?.isPendingUpload && setSelectedImageUrl(img.url)}
+                              >
+                                {msg.info?.isPendingUpload ? (
+                                  <img 
+                                    src={img.url} 
+                                    alt={`collage ${idx}`} 
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                  />
+                                ) : (
+                                  <AuthImage 
+                                    mxcUrl={img.url} 
+                                    alt={`collage ${idx}`} 
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} 
+                                  />
+                                )}
+                                {!msg.info?.isPendingUpload && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      downloadMxcMedia(client, img.url, img.name || 'image');
+                                    }}
+                                    style={{ 
+                                      position: 'absolute', 
+                                      top: 4, 
+                                      right: 4, 
+                                      background: 'rgba(0,0,0,0.5)', 
+                                      color: '#fff', 
+                                      border: 'none', 
+                                      borderRadius: '4px', 
+                                      padding: '4px', 
+                                      cursor: 'pointer', 
+                                      display: 'flex', 
+                                      alignItems: 'center' 
+                                    }}
+                                    title="Download"
+                                  >
+                                    <Download size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <>
+                            <div onClick={() => !msg.info?.isPendingUpload && setSelectedImageUrl(msg.url!)}>
+                              <AuthImage 
+                                mxcUrl={msg.url}
+                                alt={msg.body} 
+                                className="pdf-radius-sm"
+                                style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', cursor: msg.info?.isPendingUpload ? 'default' : 'pointer' }}
+                              />
+                            </div>
+                            {!msg.info?.isPendingUpload && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadMxcMedia(client, msg.url!, msg.body || 'download');
+                                }}
+                                style={{
+                                  position: 'absolute', top: 4, right: 4,
+                                  background: 'rgba(0,0,0,0.5)', color: '#fff',
+                                  border: 'none', borderRadius: '4px', padding: '4px',
+                                  cursor: 'pointer', display: 'flex', alignItems: 'center'
+                                }}
+                                title="Download Image"
+                              >
+                                <Download size={14} />
+                              </button>
+                            )}
+                          </>
                         )}
                         {msg.info?.isPendingUpload && (
                           <div style={{

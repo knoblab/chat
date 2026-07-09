@@ -429,11 +429,133 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ roomId, onBack }) => {
         }
       };
 
-      const uploadPromises = files.map((file, idx) => {
-        const fileText = idx === 0 ? text : '';
-        return uploadSingleFile(file, fileText);
-      });
-      await Promise.all(uploadPromises);
+      if (files.length > 1) {
+        // Multi-image collage upload!
+        const tempId = `pending_collage_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        
+        // Generate local preview URLs
+        const localImages = files.map(file => ({
+          url: URL.createObjectURL(file),
+          name: file.name,
+          size: file.size,
+          mimetype: file.type
+        }));
+
+        const pendingMsg: Message = {
+          id: tempId,
+          sender: client.getUserId() || 'Me',
+          body: text.trim() || '이미지 모음',
+          timestamp: Date.now(),
+          isEncrypted: isDirect,
+          msgtype: MsgType.Image,
+          url: localImages[0].url, // fallback url
+          info: {
+            mimetype: 'image/jpeg',
+            size: files.reduce((acc, f) => acc + f.size, 0),
+            isPendingUpload: true,
+            uploadProgress: 10,
+            images: localImages // local previews
+          },
+          isDisappearing: isDisappearing,
+        };
+
+        setPendingUploads(prev => [...prev, pendingMsg]);
+        setTimeout(() => scrollToBottom('smooth'), 50);
+
+        // Keep track of each file's progress
+        const fileProgresses = new Array(files.length).fill(10);
+        
+        const updateCollageProgress = () => {
+          const avgProgress = Math.round(fileProgresses.reduce((acc, p) => acc + p, 0) / files.length);
+          updatePendingProgress(tempId, avgProgress);
+        };
+
+        // Standard fake timer to increment progress up to 40% before upload begins/finishes
+        let isUploadDone = false;
+        const progressTimer = setInterval(() => {
+          if (!isUploadDone) {
+            for (let i = 0; i < fileProgresses.length; i++) {
+              if (fileProgresses[i] < 40) {
+                fileProgresses[i] += Math.floor(Math.random() * 5) + 2;
+                if (fileProgresses[i] > 40) fileProgresses[i] = 40;
+              }
+            }
+            updateCollageProgress();
+          }
+        }, 200);
+
+        try {
+          // Upload all files in parallel
+          const uploadPromises = files.map(async (file, idx) => {
+            // Optimize image
+            const optimizedFile = await optimizeImage(file, 1920, 0.85);
+            fileProgresses[idx] = 40;
+            updateCollageProgress();
+
+            const uploadRes = await client.uploadContent(optimizedFile, {
+              progressHandler: (prog: any) => {
+                if (prog && prog.total > 0) {
+                  const pct = 40 + Math.round((prog.loaded / prog.total) * 55);
+                  fileProgresses[idx] = Math.max(fileProgresses[idx], pct);
+                  updateCollageProgress();
+                }
+              }
+            } as any);
+
+            const mxcUrl = uploadRes.content_uri;
+            if (!mxcUrl) throw new Error('Upload failed');
+
+            fileProgresses[idx] = 98;
+            updateCollageProgress();
+
+            return {
+              url: mxcUrl,
+              name: optimizedFile.name || file.name || 'image',
+              size: optimizedFile.size,
+              mimetype: optimizedFile.type
+            };
+          });
+
+          const uploadedImages = await Promise.all(uploadPromises);
+          isUploadDone = true;
+          clearInterval(progressTimer);
+          updatePendingProgress(tempId, 98);
+
+          // Send the message event containing all uploaded images
+          await client.sendMessage(roomId, {
+            msgtype: MsgType.Image,
+            body: text.trim() || '이미지 모음',
+            url: uploadedImages[0].url, // fallback url
+            info: {
+              mimetype: 'image/jpeg',
+              size: uploadedImages.reduce((acc, f) => acc + f.size, 0),
+              images: uploadedImages
+            },
+            ...extraContent,
+          } as any);
+
+          updatePendingProgress(tempId, 100);
+          refreshMessages();
+
+          setTimeout(() => {
+            removePendingUpload(tempId);
+            localImages.forEach(img => URL.revokeObjectURL(img.url));
+          }, 1000);
+
+        } catch (err: any) {
+          isUploadDone = true;
+          clearInterval(progressTimer);
+          console.error('Failed to upload collage images:', err);
+          updatePendingProgress(tempId, 0, true);
+          alert('이미지 모아보내기 실패: ' + (err.message || 'Unknown error'));
+          setTimeout(() => {
+            removePendingUpload(tempId);
+            localImages.forEach(img => URL.revokeObjectURL(img.url));
+          }, 4000);
+        }
+      } else {
+        await uploadSingleFile(files[0], text);
+      }
     } else if (text.trim()) {
       try {
         const cleanText = text.trim();
