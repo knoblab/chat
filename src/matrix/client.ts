@@ -94,6 +94,7 @@ export const initMatrixClient = async (
     deviceId,
     store,
     timelineSupport: true,
+    pendingEventOrdering: 'detached' as any,
   });
 
   if (store instanceof sdk.IndexedDBStore) {
@@ -108,6 +109,7 @@ export const initMatrixClient = async (
         deviceId,
         store: new sdk.MemoryStore(),
         timelineSupport: true,
+        pendingEventOrdering: 'detached' as any,
       });
     }
   }
