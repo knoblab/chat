@@ -40,7 +40,7 @@ export const Auth: React.FC = () => {
       body: JSON.stringify({
         username,
         password: pass,
-        initial_device_display_name: 'QPI Chat Web'
+        initial_device_display_name: 'Knoblab Chat Web'
       })
     });
 
@@ -60,7 +60,7 @@ export const Auth: React.FC = () => {
       body: JSON.stringify({
         username,
         password: pass,
-        initial_device_display_name: 'QPI Chat Web',
+        initial_device_display_name: 'Knoblab Chat Web',
         auth: {
           type: 'm.login.dummy',
           session: session
@@ -181,7 +181,7 @@ export const Auth: React.FC = () => {
       <div className="pdf-panel pdf-animate-fade-in" style={{ width: '100%', maxWidth: '400px', padding: 'var(--space-400)', textAlign: 'center', marginBottom: 0 }}>
 
         <div style={{ marginBottom: 'var(--space-300)' }}>
-          <h2 className="pdf-text-heading-32 pdf-text-red" style={{ fontWeight: 800, marginBottom: 'var(--space-050)' }}>QPI Chat</h2>
+          <h2 className="pdf-text-heading-32 pdf-text-red" style={{ fontWeight: 800, marginBottom: 'var(--space-050)' }}>Knoblab Chat</h2>
           <p className="pdf-text-copy-14 pdf-text-muted">
             End-to-End Encrypted Messenger
           </p>

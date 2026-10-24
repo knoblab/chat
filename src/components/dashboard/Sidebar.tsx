@@ -22,7 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenProfile }) => {
     <aside className="pdf-sidebar">
       {/* Header */}
       <div style={{ padding: 'var(--space-200)', borderBottom: '1px solid var(--color-border-default)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="pdf-text-heading-24 pdf-text-red" style={{ letterSpacing: '-0.02em', fontWeight: 800 }}>QPI Chat</div>
+        <div className="pdf-text-heading-24 pdf-text-red" style={{ letterSpacing: '-0.02em', fontWeight: 800 }}>Knoblab Chat</div>
         <div className="pdf-flex-row pdf-gap-100">
           <button 
             onClick={onOpenProfile}

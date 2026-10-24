@@ -65,7 +65,7 @@ export const Dashboard: React.FC = () => {
         <header className="pdf-mobile-header">
           <div className="pdf-flex-row pdf-items-center" style={{ gap: '8px' }}>
             <div className="pdf-text-heading-24 pdf-text-red" style={{ letterSpacing: '-0.02em', fontWeight: 800, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              QPI
+              Knoblab
               <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{getMobileHeaderTitle()}</span>
             </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border-default)', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }} title="Matrix 종단간 암호화(E2EE) 보안 적용">

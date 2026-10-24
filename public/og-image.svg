@@ -62,7 +62,7 @@
   </g>
 
   <!-- Main Typography -->
-  <text x="310" y="200" font-family="'Pretendard Variable', Pretendard, Inter, -apple-system, sans-serif" font-weight="800" font-size="76" fill="#ffffff" letter-spacing="-1.5">QPI Chat</text>
+  <text x="310" y="200" font-family="'Pretendard Variable', Pretendard, Inter, -apple-system, sans-serif" font-weight="800" font-size="76" fill="#ffffff" letter-spacing="-1.5">Knoblab Chat</text>
   
   <!-- Sleek Version / E2E Pill in Signature Red -->
   <rect x="670" y="150" width="186" height="42" rx="21" fill="rgba(173, 29, 29, 0.18)" stroke="#ad1d1d" stroke-width="1.5"/>

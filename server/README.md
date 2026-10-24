@@ -1,4 +1,4 @@
-# 🎬 QPI Messenger Video Upload & Streaming Architecture
+# 🎬 Knoblab Messenger Video Upload & Streaming Architecture
 
 이 디렉토리(`server/`) 및 프론트엔드 시스템은 **대용량 동영상 업로드(최대 45MB), 저부하 HDD 파이프라인, 고성능 스트리밍 서빙**을 위해 지시하신 4대 가이드라인을 100% 만족하도록 설계 및 구현되었습니다.
 
