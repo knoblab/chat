@@ -21,7 +21,7 @@ export const useNotifications = (selectedRoomId: string | null) => {
     if (!client) return;
 
     let titleInterval: ReturnType<typeof setInterval> | null = null;
-    const originalTitle = 'QPI Chat';
+    const originalTitle = 'Knoblab Chat';
 
     const playAlertSound = () => {
       try {

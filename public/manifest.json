@@ -1,6 +1,6 @@
 {
-  "name": "QPI Chat",
-  "short_name": "QPI Chat",
+  "name": "Knoblab Chat",
+  "short_name": "Knoblab Chat",
   "description": "End-to-End Encrypted Messenger on Matrix Protocol",
   "start_url": "/",
   "display": "standalone",
